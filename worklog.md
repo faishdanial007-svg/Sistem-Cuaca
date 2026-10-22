@@ -21,3 +21,20 @@ Stage Summary:
 - API sebenar: APIMS DOE Malaysia (IPU/jerebu 68 stesen) + Open-Meteo (cuaca)
 - Fail utama: src/lib/cuaca.ts, src/app/api/ipu/route.ts, src/app/api/weather/route.ts, src/components/panel-cuaca.tsx, src/app/page.tsx
 - Nota: endpoint APIMS ditemui melalui pemerhatian rangkaian portal rasmi; cache server-side melindungi server DOE; semua masa dipapar zon Malaysia
+
+---
+Task ID: 2
+Agent: Main agent (Z.ai)
+Task: Iterasi 2 - kad IPU berwarna penuh ikut tahap, ramalan disahkan data sebenar, kedudukan IPU tertinggi sebenar (bukan hijau).
+
+Work Log:
+- Tambah GAYA_KAD dalam src/lib/cuaca.ts: latar kad penuh, teks/kurang/sub, tile, garis graf, chip terbalik bagi 5 tahap (kuning gelap teks perang; hijau/biru/oren/merah teks putih)
+- /api/ipu: buang endpoint apiranking (rupanya papar stesen terbersih/hijau); kedudukan kini diisih menurun daripada 68 stesen mapcaqm - papar 5 tertinggi sebenar (163 Nilai, 159 Bukit Rambai, 155 Klang/Seremban/Johan Setia - semua Unhealthy)
+- panel-cuaca.tsx: SkalaIPU terima warnaLabel/warnaJulat, Sparkline terima warnaGaris + kelegapan gradien diturunkan 0.28->0.16
+- page.tsx: kad Bacaan IPU latar penuh warna tahap (transisi 500ms), semua teks kad ikut gaya kontras, chip tahap latar putih, ranking chip warna penuh tahap, nota "Data ramalan sebenar Open-Meteo zon Asia/Kuala_Lumpur" pada kad ramalan
+- Lint bersih; verifikasi agent-browser desktop 1440 & iPhone 390: kad IPU kuning penuh (IPU 140 Tidak Sihat), nilai ramalan UI = API (26/34 = round(25.7/33.8)), tiada ralat konsol
+
+Stage Summary:
+- Kad IPU kini berwarna penuh ikut tahap IPU secara automatik
+- Kedudukan IPU Tertinggi memaparkan stesen paling terjejas (kuning/oren/merah)
+- Ramalan 7 hari disahkan data sebenar Open-Meteo dan dilabel sumber

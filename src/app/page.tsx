@@ -24,6 +24,7 @@ import {
 
 import {
   LOKASI,
+  GAYA_KAD,
   infoKodCuaca,
   infoTahap,
   jarakKm,
@@ -67,7 +68,14 @@ interface ResponIPU {
   ok: boolean;
   updatedAt: string;
   stations: StesenKlien[];
-  ranking: { stesen: string; lokasi: string; ipu: number; pencemar: string | null }[];
+  ranking: {
+    stesen: string;
+    lokasi: string;
+    negeri: string;
+    ipu: number;
+    pencemar: string | null;
+    kelas: string | null;
+  }[];
   trend: { masa: string; ipu: number | null }[] | null;
   trendStation: string | null;
   ralat?: string;
@@ -220,6 +228,8 @@ export default function HalamanCuaca() {
   const nilaiIPU = stesenTerdekat?.ipu ?? null;
   const tahap: TahapIPU = tahapDariNilai(nilaiIPU);
   const info = infoTahap(tahap);
+  // Gaya kad penuh ikut tahap (kuning bila Tidak Sihat, biru bila Sederhana, dll.)
+  const gaya = tahap !== "tiada" ? GAYA_KAD[tahap as Exclude<TahapIPU, "tiada">] : null;
   const warnaNilai =
     tahap !== "tiada" ? WARNA_NILAI_KAD[tahap as Exclude<TahapIPU, "tiada">] : "#8D8378";
 
@@ -314,16 +324,28 @@ export default function HalamanCuaca() {
           <div className="flex flex-col gap-4 sm:gap-5">
             {/* ============ KAD IPU ============ */}
             <motion.section {...anim(0.05)} aria-label="Indeks Pencemaran Udara">
-              <div className="rounded-[28px] border border-white/70 bg-white/60 p-5 shadow-[0_14px_40px_-16px_rgba(146,84,28,0.28)] backdrop-blur-xl sm:p-6">
+              <div
+                className="rounded-[28px] border p-5 shadow-[0_14px_40px_-16px_rgba(146,84,28,0.28)] backdrop-blur-xl transition-colors duration-500 sm:p-6"
+                style={{
+                  backgroundColor: gaya?.latar ?? "rgba(255,255,255,0.6)",
+                  borderColor: gaya?.bingkai ?? "rgba(255,255,255,0.7)",
+                }}
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="flex items-center gap-1.5 text-[13px] font-bold uppercase tracking-[0.14em] text-[#B0723A]">
+                    <p
+                      className="flex items-center gap-1.5 text-[13px] font-bold uppercase tracking-[0.14em]"
+                      style={{ color: gaya?.sub ?? "#B0723A" }}
+                    >
                       <Gauge size={14} aria-hidden="true" /> Bacaan IPU
                     </p>
-                    <p className="mt-1 truncate text-xl font-bold text-[#45220D]">
+                    <p
+                      className="mt-1 truncate text-xl font-bold"
+                      style={{ color: gaya?.teks ?? "#45220D" }}
+                    >
                       {lokasi.nama}
                     </p>
-                    <p className="text-xs text-[#9A7350]">
+                    <p className="text-xs" style={{ color: gaya?.kurang ?? "#9A7350" }}>
                       {stesenTerdekat
                         ? `Stesen ${stesenTerdekat.id} · ${stesenTerdekat.lokasi}`
                         : "Mencari stesen terdekat…"}
@@ -332,8 +354,8 @@ export default function HalamanCuaca() {
                   <span
                     className="shrink-0 rounded-full px-3.5 py-1.5 text-[13px] font-bold shadow-sm"
                     style={
-                      info
-                        ? { backgroundColor: info.warna, color: info.warnaTeks }
+                      gaya
+                        ? { backgroundColor: gaya.chipLatar, color: gaya.chipTeks }
                         : { backgroundColor: "rgba(141,131,120,0.2)", color: "#6B5E52" }
                     }
                   >
@@ -353,19 +375,25 @@ export default function HalamanCuaca() {
                       <div className="flex items-end gap-2.5">
                         <span
                           className="text-[68px] font-bold leading-none tracking-tight sm:text-[76px]"
-                          style={{ color: warnaNilai }}
+                          style={{ color: gaya?.teks ?? warnaNilai }}
                         >
                           {nilaiIPU ?? "--"}
                         </span>
-                        <span className="pb-2.5 text-sm font-semibold text-[#9A7350]">
+                        <span
+                          className="pb-2.5 text-sm font-semibold"
+                          style={{ color: gaya?.kurang ?? "#9A7350" }}
+                        >
                           IPU
                         </span>
                       </div>
-                      <div className="pb-2 text-right text-[11.5px] leading-snug text-[#9A7350]">
+                      <div
+                        className="pb-2 text-right text-[11.5px] leading-snug"
+                        style={{ color: gaya?.kurang ?? "#9A7350" }}
+                      >
                         {stesenTerdekat?.masaBacaan && (
                           <p>
                             Bacaan jam{" "}
-                            <b className="text-[#7A4A28]">
+                            <b style={{ color: gaya?.teks ?? "#7A4A28" }}>
                               {formatJam(stesenTerdekat.masaBacaan)}
                             </b>
                           </p>
@@ -373,7 +401,7 @@ export default function HalamanCuaca() {
                         {peneranganPencemar(stesenTerdekat?.pencemar) ? (
                           <p>
                             Dominan:{" "}
-                            <b className="text-[#7A4A28]">
+                            <b style={{ color: gaya?.teks ?? "#7A4A28" }}>
                               {peneranganPencemar(stesenTerdekat?.pencemar)}
                             </b>
                           </p>
@@ -383,16 +411,29 @@ export default function HalamanCuaca() {
                       </div>
                     </div>
 
-                    <SkalaIPU nilai={nilaiIPU} />
+                    <SkalaIPU
+                      nilai={nilaiIPU}
+                      warnaLabel={gaya?.teks}
+                      warnaJulat={gaya?.kurang}
+                    />
 
                     {/* Trend 24 jam */}
-                    <div className="mt-4 border-t border-white/70 pt-3">
+                    <div
+                      className="mt-4 border-t pt-3"
+                      style={{ borderColor: gaya?.bingkai ?? "rgba(255,255,255,0.7)" }}
+                    >
                       <div className="flex items-baseline justify-between gap-2">
-                        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#B0723A]">
+                        <p
+                          className="text-[11px] font-bold uppercase tracking-[0.14em]"
+                          style={{ color: gaya?.sub ?? "#B0723A" }}
+                        >
                           Trend IPU 24 Jam
                         </p>
                         {trend && trend.length > 1 && (
-                          <p className="text-right text-[10.5px] leading-tight text-[#9A7350]">
+                          <p
+                            className="text-right text-[10.5px] leading-tight"
+                            style={{ color: gaya?.kurang ?? "#9A7350" }}
+                          >
                             {(() => {
                               const potong = trend.slice(-24);
                               const mula = potong[0];
@@ -407,7 +448,10 @@ export default function HalamanCuaca() {
                         )}
                       </div>
                       {trend && trend.length > 1 ? (
-                        <Sparkline nilai={trend.slice(-24).map((t) => t.ipu)} />
+                        <Sparkline
+                          nilai={trend.slice(-24).map((t) => t.ipu)}
+                          warnaGaris={gaya?.garisGraf}
+                        />
                       ) : (
                         <div className="flex h-16 items-center justify-center">
                           <Kerangka className="h-3 w-40" />
@@ -615,6 +659,9 @@ export default function HalamanCuaca() {
                     })}
                   </div>
                 )}
+                <p className="mt-3.5 text-center text-[10.5px] text-[#A98A6C]">
+                  Data ramalan sebenar · Open-Meteo · zon Asia/Kuala_Lumpur
+                </p>
               </div>
             </motion.section>
 
@@ -637,10 +684,6 @@ export default function HalamanCuaca() {
                         {(dataIPU?.ranking ?? []).slice(0, 5).map((r, i) => {
                           const t = tahapDariNilai(r.ipu);
                           const infoR = infoTahap(t);
-                          const warnaNilaiR =
-                            t !== "tiada"
-                              ? WARNA_NILAI_KAD[t as Exclude<TahapIPU, "tiada">]
-                              : "#8D8378";
                           return (
                             <div
                               key={r.stesen}
@@ -656,7 +699,7 @@ export default function HalamanCuaca() {
                                 className="shrink-0 rounded-full px-3 py-1 text-[13px] font-bold"
                                 style={
                                   infoR
-                                    ? { backgroundColor: infoR.warnaLatar, color: warnaNilaiR }
+                                    ? { backgroundColor: infoR.warna, color: infoR.warnaTeks }
                                     : { backgroundColor: "rgba(141,131,120,0.2)", color: "#6B5E52" }
                                 }
                               >
@@ -675,7 +718,7 @@ export default function HalamanCuaca() {
                     {dataIPU && (
                       <p className="mt-4 flex items-center gap-1.5 text-[11px] text-[#9A7350]">
                         <RotateCw size={11} aria-hidden="true" />
-                        Dikemas kini {formatJam(dataIPU.updatedAt)} · auto setiap 10 minit
+                        Bacaan tertinggi {formatJam(dataIPU.updatedAt)} · auto setiap 10 minit
                       </p>
                     )}
                   </>

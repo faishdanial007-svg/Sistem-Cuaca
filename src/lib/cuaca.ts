@@ -132,6 +132,89 @@ export const SUSUNAN_TAHAP: Exclude<TahapIPU, "tiada">[] = [
   "berbahaya",
 ];
 
+// ------------------------------------------------------------
+// Gaya kad penuh mengikut tahap IPU - keseluruhan latar kad
+// mengambil warna tahap dengan teks berkontras selesa di mata
+// ------------------------------------------------------------
+export interface GayaKadTahap {
+  /** Warna latar kad penuh */
+  latar: string;
+  /** Warna bingkai kad */
+  bingkai: string;
+  /** Warna teks utama (tajuk, nilai besar) */
+  teks: string;
+  /** Warna teks kurang penting */
+  kurang: string;
+  /** Warna sub-tajuk uppercase */
+  sub: string;
+  /** Latar tile dalaman */
+  tile: string;
+  /** Warna garis graf trend */
+  garisGraf: string;
+  /** Latar badge tahap (terbalik supaya jelas) */
+  chipLatar: string;
+  /** Warna teks badge tahap */
+  chipTeks: string;
+}
+
+export const GAYA_KAD: Record<Exclude<TahapIPU, "tiada">, GayaKadTahap> = {
+  baik: {
+    latar: "rgba(46,158,91,0.88)",
+    bingkai: "rgba(255,255,255,0.5)",
+    teks: "#FFFFFF",
+    kurang: "rgba(255,255,255,0.8)",
+    sub: "rgba(255,255,255,0.92)",
+    tile: "rgba(255,255,255,0.25)",
+    garisGraf: "#FFFFFF",
+    chipLatar: "rgba(255,255,255,0.92)",
+    chipTeks: "#1E7A43",
+  },
+  sederhana: {
+    latar: "rgba(61,127,193,0.88)",
+    bingkai: "rgba(255,255,255,0.5)",
+    teks: "#FFFFFF",
+    kurang: "rgba(255,255,255,0.8)",
+    sub: "rgba(255,255,255,0.92)",
+    tile: "rgba(255,255,255,0.25)",
+    garisGraf: "#FFFFFF",
+    chipLatar: "rgba(255,255,255,0.92)",
+    chipTeks: "#2A6398",
+  },
+  "tidak-sihat": {
+    latar: "rgba(233,197,74,0.92)",
+    bingkai: "rgba(255,255,255,0.6)",
+    teks: "#3F2D05",
+    kurang: "rgba(63,45,5,0.72)",
+    sub: "#7A5E10",
+    tile: "rgba(255,255,255,0.45)",
+    garisGraf: "#3F2D05",
+    chipLatar: "rgba(255,255,255,0.88)",
+    chipTeks: "#8F6F08",
+  },
+  "sangat-tidak-sihat": {
+    latar: "rgba(224,114,47,0.9)",
+    bingkai: "rgba(255,255,255,0.5)",
+    teks: "#FFFFFF",
+    kurang: "rgba(255,255,255,0.82)",
+    sub: "rgba(255,255,255,0.94)",
+    tile: "rgba(255,255,255,0.25)",
+    garisGraf: "#FFFFFF",
+    chipLatar: "rgba(255,255,255,0.92)",
+    chipTeks: "#B4501A",
+  },
+  berbahaya: {
+    latar: "rgba(201,59,59,0.9)",
+    bingkai: "rgba(255,255,255,0.5)",
+    teks: "#FFFFFF",
+    kurang: "rgba(255,255,255,0.82)",
+    sub: "rgba(255,255,255,0.94)",
+    tile: "rgba(255,255,255,0.25)",
+    garisGraf: "#FFFFFF",
+    chipLatar: "rgba(255,255,255,0.92)",
+    chipTeks: "#A62E2E",
+  },
+};
+
 export function tahapDariNilai(nilai: number | null | undefined): TahapIPU {
   if (nilai == null || Number.isNaN(nilai)) return "tiada";
   const n = Math.round(nilai);

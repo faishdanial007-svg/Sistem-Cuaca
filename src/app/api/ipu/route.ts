@@ -26,13 +26,6 @@ interface StesenMentah {
   RECORD_DT: string | null;
 }
 
-interface RankingMentah {
-  STATION_ID: string;
-  API: number;
-  LOCATION: string;
-  PARAM_SYMBOL: string | null;
-}
-
 interface TrendMentah {
   STATION_ID: string;
   DATETIME: string;
@@ -133,17 +126,29 @@ export async function GET(req: NextRequest) {
   const trendStateId = searchParams.get("trendStateId");
 
   try {
-    const { mapcaqm, ranking } = await denganCache("utama", async () => {
-      const [mapRes, rankRes] = await Promise.all([
-        fetchJSON<{ data: StesenMentah[] }>(`${BASE_APIMS}/mapcaqm`),
-        fetchJSON<{ api_ranking: RankingMentah[] }>(`${BASE_APIMS}/apiranking`).catch(
-          () => ({ api_ranking: [] as RankingMentah[] }),
-        ),
-      ]);
-      return { mapcaqm: mapRes, ranking: rankRes };
+    const { mapcaqm } = await denganCache("utama", async () => {
+      const mapRes = await fetchJSON<{ data: StesenMentah[] }>(
+        `${BASE_APIMS}/mapcaqm`,
+      );
+      return { mapcaqm: mapRes };
     });
 
     const stations = (mapcaqm.data ?? []).map(petakanStesen);
+
+    // Kedudukan IPU TERTINGGI sebenar: isih semua stesen menurun
+    // mengikut bacaan (yang paling tidak sihat/berbahaya di atas)
+    const ranking = stations
+      .filter((s) => s.ipu != null)
+      .sort((a, b) => (b.ipu ?? 0) - (a.ipu ?? 0))
+      .slice(0, 5)
+      .map((s) => ({
+        stesen: s.id,
+        lokasi: s.lokasi,
+        negeri: s.negeri,
+        ipu: s.ipu as number,
+        pencemar: s.pencemar,
+        kelas: s.kelas,
+      }));
 
     let trend: TitikTrend[] | null = null;
     let trendStation: string | null = null;
@@ -179,12 +184,7 @@ export async function GET(req: NextRequest) {
         sumber: "APIMS - Jabatan Alam Sekitar (DOE) Malaysia",
         updatedAt: new Date().toISOString(),
         stations,
-        ranking: (ranking.api_ranking ?? []).map((r) => ({
-          stesen: r.STATION_ID,
-          lokasi: r.LOCATION,
-          ipu: r.API,
-          pencemar: r.PARAM_SYMBOL ?? null,
-        })),
+        ranking,
         trend,
         trendStation,
       },

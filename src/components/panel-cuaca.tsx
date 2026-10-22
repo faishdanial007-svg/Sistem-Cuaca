@@ -84,7 +84,17 @@ export const WARNA_NILAI_KAD: Record<Exclude<TahapIPU, "tiada">, string> = {
 // ------------------------------------------------------------
 // Skala IPU 5 tahap dengan penanda bacaan semasa
 // ------------------------------------------------------------
-export function SkalaIPU({ nilai }: { nilai: number | null }) {
+export function SkalaIPU({
+  nilai,
+  warnaLabel,
+  warnaJulat,
+}: {
+  nilai: number | null;
+  /** Warna label tahap (guna bila kad berwarna penuh) */
+  warnaLabel?: string;
+  /** Warna julat bawah label */
+  warnaJulat?: string;
+}) {
   const posisi =
     nilai == null
       ? null
@@ -128,11 +138,14 @@ export function SkalaIPU({ nilai }: { nilai: number | null }) {
           <div key={t} className="flex-1 text-center">
             <p
               className="text-[9.5px] font-semibold leading-tight sm:text-[11px]"
-              style={{ color: WARNA_NILAI_KAD[t] }}
+              style={{ color: warnaLabel ?? WARNA_NILAI_KAD[t] }}
             >
               {TAHAP_IPU[t].label}
             </p>
-            <p className="text-[8.5px] text-[#9A7350] sm:text-[10px]">
+            <p
+              className="text-[8.5px] sm:text-[10px]"
+              style={{ color: warnaJulat ?? "#9A7350" }}
+            >
               {TAHAP_IPU[t].min}–{TAHAP_IPU[t].max}
             </p>
           </div>
@@ -149,10 +162,13 @@ export function Sparkline({
   nilai,
   lebar = 300,
   tinggi = 64,
+  warnaGaris,
 }: {
   nilai: (number | null)[];
   lebar?: number;
   tinggi?: number;
+  /** Paksa warna garis (guna bila kad berwarna penuh) */
+  warnaGaris?: string;
 }) {
   const sah = nilai
     .map((v, i) => ({ v, i }))
@@ -174,10 +190,11 @@ export function Sparkline({
   const luas = `M${titik[0].x.toFixed(1)},${tinggi - pad} L${garis.replace(/ /g, " L")} L${titik[titik.length - 1].x.toFixed(1)},${tinggi - pad} Z`;
   const terakhir = titik[titik.length - 1];
   const tahapAkhir = tahapDariNilai(terakhir.v);
-  const warnaAkhir =
+  const warnaAutonomi =
     tahapAkhir === "tiada"
       ? "#8D8378"
       : TAHAP_IPU[tahapAkhir as Exclude<TahapIPU, "tiada">].warna;
+  const stroke = warnaGaris ?? warnaAutonomi;
 
   const idGradien = `gradien-ipu-${Math.abs(terakhir.v)}-${titik.length}`;
 
@@ -191,15 +208,15 @@ export function Sparkline({
     >
       <defs>
         <linearGradient id={idGradien} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={warnaAkhir} stopOpacity="0.28" />
-          <stop offset="100%" stopColor={warnaAkhir} stopOpacity="0.02" />
+          <stop offset="0%" stopColor={stroke} stopOpacity="0.16" />
+          <stop offset="100%" stopColor={stroke} stopOpacity="0.02" />
         </linearGradient>
       </defs>
       <path d={luas} fill={`url(#${idGradien})`} />
       <polyline
         points={garis}
         fill="none"
-        stroke={warnaAkhir}
+        stroke={stroke}
         strokeWidth="2.5"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -208,7 +225,7 @@ export function Sparkline({
         cx={terakhir.x}
         cy={terakhir.y}
         r="4"
-        fill={warnaAkhir}
+        fill={stroke}
         stroke="white"
         strokeWidth="2"
       />

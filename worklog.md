@@ -89,3 +89,19 @@ Stage Summary:
 - Halaman kini: Kad IPU (penuh warna) -> Daerah Terjejas Jerebu -> Cuaca Sekarang + 12 Jam Akan Datang -> Footer; tiada lagi ramalan 7 hari
 - Payload Open-Meteo dikecilkan (forecast_days=1) memandangkan hanya data hari ini diperlukan untuk tile cuaca semasa
 - Semua kefungsian lain tidak berubah: kad penuh warna ikut tahap, daerah terjejas isih menurun, auto segar 10 minit, responsive
+
+---
+Task ID: 6
+Agent: Z.ai (utama)
+Task: Kad bacaan IPU paling atas mengesan lokasi telefon pengguna (permintaan: "bacaan IPU yang atas sekali bagi detect location henpon pengguna")
+
+Work Log:
+- lib/cuaca.ts: tambah semula fungsi jarakKm (haversine) untuk cari stesen paling hampir
+- page.tsx: statusLokasi ("meminta"|"berjaya"|"gagal"|"tiada-sokongan") + lokasiPengguna + refNegeriLokasi; kesanLokasi() guna navigator.geolocation.getCurrentPosition (timeout 15s, maximumAge 5 min), auto dijalankan sekali semasa halaman dibuka; stesenTerdekat useMemo (haversine ke semua stesen berdaerah Perak/Selangor yang ada bacaan); auto tukar negeri mengikut negeri stesen terdekat (guard ref supaya tidak tukar semula selepas pilihan manual); kad atas keutamaan bacaan stesen terdekat (jika dalam negeri terpilih), jika tidak bacaan daerah paling teruk seperti sedia ada
+- JSX kad atas: tajuk dinamik "Bacaan IPU · Sekitar Anda" bila lokasi berjaya; baris status "Mengesan lokasi telefon anda…" (pulsing) semasa meminta; baris "Mengikut lokasi telefon anda · X km" bila berjaya; butang "Guna lokasi telefon untuk bacaan lebih tepat" bila gagal (cuba semula)
+- Lint & tsc src/ bersih; agent-browser: desktop 1440 (gagal -> butang fallback muncul; mock Ipoh 4.6,101.09 -> negeri auto-tukar ke Perak, kad "Sekitar Anda" Kinta/Stesen CA11A Tasek Ipoh 82, jarak 4.4 km); mobile 390 (gagal -> butang muncul tiada overflow; mock Klang 3.05,101.45 -> Stesen CA21B Klang 155, jarak 5.7 km, kad kuning penuh); tiada ralat konsol
+
+Stage Summary:
+- Kad IPU atas kini personal: papar bacaan stesen DOE paling hampir dengan lokasi telefon pengguna beserta jarak, auto pilih negeri yang sepadan
+- Fallback anggun: tanpa kebenaran lokasi/sokongan -> kekal bacaan daerah paling teruk negeri terpilih + butang cuba semula
+- Semua fungsi sedia ada tidak berubah (daerah terjejas menurun, kad penuh warna, auto segar 10 minit, responsive)

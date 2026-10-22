@@ -274,6 +274,20 @@ export function negeriById(id: string): Negeri {
   return NEGERI_PILIHAN.find((n) => n.id === id) ?? NEGERI_PILIHAN[0];
 }
 
+// Jarak haversine antara dua koordinat (km) -
+// digunakan untuk cari stesen DOE paling hampir dengan lokasi pengguna
+export function jarakKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // jejari bumi, km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 // ------------------------------------------------------------
 // Pemetaan stesen APIMS DOE -> daerah (kunci = STATION_ID).
 // Digunakan untuk memaparkan jerebu mengikut daerah sebenar.

@@ -7,7 +7,7 @@
 // responsive mobile-first.
 // ============================================================
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   MapPin,
@@ -20,6 +20,7 @@ import {
   SunDim,
   Gauge,
   RotateCw,
+  LocateFixed,
 } from "lucide-react";
 
 import {
@@ -28,6 +29,7 @@ import {
   GAYA_KAD,
   infoKodCuaca,
   infoTahap,
+  jarakKm,
   negeriById,
   peneranganPencemar,
   tahapDariNilai,
@@ -123,6 +125,8 @@ interface KumpulanDaerah {
 
 const SELANG_AUTO = 10 * 60 * 1000; // 10 minit
 
+type StatusLokasi = "meminta" | "berjaya" | "gagal" | "tiada-sokongan";
+
 export default function HalamanCuaca() {
   const [negeriId, setNegeriId] = useState("selangor");
   const negeri = negeriById(negeriId);
@@ -135,6 +139,11 @@ export default function HalamanCuaca() {
   const [ralatCuaca, setRalatCuaca] = useState<string | null>(null);
   const [segarkan, setSegarkan] = useState(false);
   const [masaKemasKini, setMasaKemasKini] = useState<string | null>(null);
+
+  // ---------- deteksi lokasi telefon pengguna (Geolocation API) ----------
+  const [statusLokasi, setStatusLokasi] = useState<StatusLokasi | null>(null);
+  const [lokasiPengguna, setLokasiPengguna] = useState<{ lat: number; lon: number } | null>(null);
+  const refNegeriLokasi = useRef<string | null>(null);
 
   // ---------- pemuatan data ----------
   const muatIPUSekarang = useCallback(async (senyap = false) => {
@@ -195,6 +204,28 @@ export default function HalamanCuaca() {
     setTimeout(() => setSegarkan(false), 600);
   }, [muatIPUSekarang, muatCuacaSekarang]);
 
+  // ---------- kesan lokasi telefon pengguna ----------
+  const kesanLokasi = useCallback(() => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setStatusLokasi("tiada-sokongan");
+      return;
+    }
+    setStatusLokasi("meminta");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLokasiPengguna({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+        setStatusLokasi("berjaya");
+      },
+      () => setStatusLokasi("gagal"),
+      { enableHighAccuracy: false, timeout: 15000, maximumAge: 5 * 60 * 1000 },
+    );
+  }, []);
+
+  // Kesan lokasi secara automatik sekali apabila halaman dibuka
+  useEffect(() => {
+    kesanLokasi();
+  }, [kesanLokasi]);
+
   // ---------- kumpul stesen mengikut daerah bagi negeri terpilih ----------
   const kumpulanDaerah = useMemo<KumpulanDaerah[]>(() => {
     const senarai = (dataIPU?.stations ?? []).filter(
@@ -233,10 +264,48 @@ export default function HalamanCuaca() {
     return kumpulan.sort((a, b) => b.maks - a.maks);
   }, [dataIPU, negeri.idApims]);
 
+  // ---------- stesen DOE paling hampir dengan lokasi telefon pengguna ----------
+  const stesenTerdekat = useMemo<{ stesen: StesenKlien; jarak: number } | null>(() => {
+    if (!lokasiPengguna || !dataIPU) return null;
+    let terbaik: { stesen: StesenKlien; jarak: number } | null = null;
+    for (const s of dataIPU.stations) {
+      if (s.ipu == null || DAERAH_STESEN[s.id] == null) continue; // hanya stesen daerah Perak/Selangor
+      const j = jarakKm(lokasiPengguna.lat, lokasiPengguna.lon, s.lat, s.lon);
+      if (terbaik == null || j < terbaik.jarak) terbaik = { stesen: s, jarak: j };
+    }
+    return terbaik;
+  }, [lokasiPengguna, dataIPU]);
+
+  // Tukar negeri secara automatik mengikut lokasi pengguna (sekali bagi setiap deteksi)
+  useEffect(() => {
+    if (!stesenTerdekat) return;
+    const id = NEGERI_PILIHAN.find(
+      (n) => n.idApims === stesenTerdekat.stesen.negeri.trim().toUpperCase(),
+    )?.id;
+    if (id && refNegeriLokasi.current !== id) {
+      refNegeriLokasi.current = id;
+      setNegeriId(id);
+    }
+  }, [stesenTerdekat]);
+
   // ---------- nilai terbitan ----------
   const daerahTeruk = kumpulanDaerah.find((k) => k.maks >= 0) ?? null;
   const stesenTeruk = daerahTeruk?.stesen[0] ?? null;
-  const nilaiIPU = daerahTeruk && daerahTeruk.maks >= 0 ? daerahTeruk.maks : null;
+  // Kad atas: keutamaan bacaan stesen paling hampir dengan lokasi telefon pengguna
+  // (jika berjaya dikesan & stesen itu dalam negeri terpilih); jika tidak,
+  // papar bacaan daerah paling teruk negeri terpilih.
+  const stesenLokasi =
+    statusLokasi === "berjaya" &&
+    stesenTerdekat &&
+    stesenTerdekat.stesen.negeri.trim().toUpperCase() === negeri.idApims
+      ? stesenTerdekat.stesen
+      : null;
+  const daerahLokasi = stesenLokasi ? (DAERAH_STESEN[stesenLokasi.id] ?? null) : null;
+  const nilaiIPU = stesenLokasi
+    ? stesenLokasi.ipu
+    : daerahTeruk && daerahTeruk.maks >= 0
+      ? daerahTeruk.maks
+      : null;
   const tahap: TahapIPU = tahapDariNilai(nilaiIPU);
   const info = infoTahap(tahap);
   // Gaya kad penuh ikut tahap (kuning bila Tidak Sihat, biru bila Sederhana, dll.)
@@ -245,6 +314,7 @@ export default function HalamanCuaca() {
   const bilDaerah = kumpulanDaerah.length;
   const bilTerjejas = kumpulanDaerah.filter((k) => k.maks > 50).length;
   const bilStesen = kumpulanDaerah.reduce((n, k) => n + k.stesen.length, 0);
+  const fmtJarak = (km: number) => (km < 10 ? km.toFixed(1) : String(Math.round(km)));
 
   const cuacaSekarang = dataCuaca?.current ?? null;
   const infoCuacaSekarang = infoKodCuaca(cuacaSekarang?.kod);
@@ -345,19 +415,48 @@ export default function HalamanCuaca() {
                       className="flex items-center gap-1.5 text-[13px] font-bold uppercase tracking-[0.14em]"
                       style={{ color: gaya?.sub ?? "#B0723A" }}
                     >
-                      <Gauge size={14} aria-hidden="true" /> Bacaan IPU · {negeri.nama}
+                      <Gauge size={14} aria-hidden="true" />{" "}
+                      {stesenLokasi ? "Bacaan IPU · Sekitar Anda" : `Bacaan IPU · ${negeri.nama}`}
                     </p>
                     <p
                       className="mt-1 truncate text-xl font-bold"
                       style={{ color: gaya?.teks ?? "#45220D" }}
                     >
-                      {daerahTeruk ? daerahTeruk.daerah : negeri.nama}
+                      {stesenLokasi && daerahLokasi
+                        ? daerahLokasi.daerah
+                        : daerahTeruk
+                          ? daerahTeruk.daerah
+                          : negeri.nama}
                     </p>
                     <p className="text-xs" style={{ color: gaya?.kurang ?? "#9A7350" }}>
-                      {stesenTeruk
-                        ? `Stesen ${stesenTeruk.id} · ${stesenTeruk.tempat}`
-                        : "Menunggu data stesen…"}
+                      {stesenLokasi && daerahLokasi
+                        ? `Stesen ${stesenLokasi.id} · ${daerahLokasi.tempat}`
+                        : stesenTeruk
+                          ? `Stesen ${stesenTeruk.id} · ${stesenTeruk.tempat}`
+                          : "Menunggu data stesen…"}
                     </p>
+                    {statusLokasi === "meminta" && (
+                      <p
+                        className="mt-1.5 flex items-center gap-1.5 text-[11px] font-medium"
+                        style={{ color: gaya?.kurang ?? "#9A7350" }}
+                      >
+                        <span
+                          className="h-1.5 w-1.5 animate-pulse rounded-full"
+                          style={{ backgroundColor: gaya?.teks ?? "#B0723A" }}
+                          aria-hidden="true"
+                        />
+                        Mengesan lokasi telefon anda…
+                      </p>
+                    )}
+                    {stesenLokasi && stesenTerdekat && (
+                      <p
+                        className="mt-1.5 flex items-center gap-1.5 text-[11px] font-semibold"
+                        style={{ color: gaya?.kurang ?? "#9A7350" }}
+                      >
+                        <LocateFixed size={12} aria-hidden="true" />
+                        Mengikut lokasi telefon anda · {fmtJarak(stesenTerdekat.jarak)} km
+                      </p>
+                    )}
                   </div>
                   <span
                     className="shrink-0 rounded-full px-3.5 py-1.5 text-[13px] font-bold shadow-sm"
@@ -461,6 +560,20 @@ export default function HalamanCuaca() {
                         </p>
                       </div>
                     </div>
+
+                    {statusLokasi === "gagal" && (
+                      <button
+                        onClick={kesanLokasi}
+                        className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-2xl px-3 py-2.5 text-xs font-semibold transition active:scale-[0.99] sm:max-w-md"
+                        style={{
+                          backgroundColor: gaya?.tile ?? "rgba(255,255,255,0.45)",
+                          color: gaya?.teks ?? "#45220D",
+                        }}
+                      >
+                        <LocateFixed size={14} aria-hidden="true" />
+                        Guna lokasi telefon untuk bacaan lebih tepat
+                      </button>
+                    )}
                   </>
                 )}
               </div>

@@ -149,8 +149,6 @@ export interface GayaKadTahap {
   sub: string;
   /** Latar tile dalaman */
   tile: string;
-  /** Warna garis graf trend */
-  garisGraf: string;
   /** Latar badge tahap (terbalik supaya jelas) */
   chipLatar: string;
   /** Warna teks badge tahap */
@@ -165,7 +163,6 @@ export const GAYA_KAD: Record<Exclude<TahapIPU, "tiada">, GayaKadTahap> = {
     kurang: "rgba(255,255,255,0.8)",
     sub: "rgba(255,255,255,0.92)",
     tile: "rgba(255,255,255,0.25)",
-    garisGraf: "#FFFFFF",
     chipLatar: "rgba(255,255,255,0.92)",
     chipTeks: "#1E7A43",
   },
@@ -176,7 +173,6 @@ export const GAYA_KAD: Record<Exclude<TahapIPU, "tiada">, GayaKadTahap> = {
     kurang: "rgba(255,255,255,0.8)",
     sub: "rgba(255,255,255,0.92)",
     tile: "rgba(255,255,255,0.25)",
-    garisGraf: "#FFFFFF",
     chipLatar: "rgba(255,255,255,0.92)",
     chipTeks: "#2A6398",
   },
@@ -187,7 +183,6 @@ export const GAYA_KAD: Record<Exclude<TahapIPU, "tiada">, GayaKadTahap> = {
     kurang: "rgba(63,45,5,0.72)",
     sub: "#7A5E10",
     tile: "rgba(255,255,255,0.45)",
-    garisGraf: "#3F2D05",
     chipLatar: "rgba(255,255,255,0.88)",
     chipTeks: "#8F6F08",
   },
@@ -198,7 +193,6 @@ export const GAYA_KAD: Record<Exclude<TahapIPU, "tiada">, GayaKadTahap> = {
     kurang: "rgba(255,255,255,0.82)",
     sub: "rgba(255,255,255,0.94)",
     tile: "rgba(255,255,255,0.25)",
-    garisGraf: "#FFFFFF",
     chipLatar: "rgba(255,255,255,0.92)",
     chipTeks: "#B4501A",
   },
@@ -209,7 +203,6 @@ export const GAYA_KAD: Record<Exclude<TahapIPU, "tiada">, GayaKadTahap> = {
     kurang: "rgba(255,255,255,0.82)",
     sub: "rgba(255,255,255,0.94)",
     tile: "rgba(255,255,255,0.25)",
-    garisGraf: "#FFFFFF",
     chipLatar: "rgba(255,255,255,0.92)",
     chipTeks: "#A62E2E",
   },

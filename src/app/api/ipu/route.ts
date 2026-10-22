@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
 // ============================================================
 // /api/ipu - Proksi data Indeks Pencemaran Udara (IPU) masa nyata
@@ -26,13 +26,6 @@ interface StesenMentah {
   RECORD_DT: string | null;
 }
 
-interface TrendMentah {
-  STATION_ID: string;
-  DATETIME: string;
-  API: number | null;
-  API_CATEGORY: string | null;
-}
-
 export interface StesenIPU {
   id: string;
   lokasi: string;
@@ -44,11 +37,6 @@ export interface StesenIPU {
   pencemar: string | null;
   kelas: string | null;
   masaBacaan: string | null;
-}
-
-export interface TitikTrend {
-  masa: string;
-  ipu: number | null;
 }
 
 interface CacheEntri {
@@ -87,17 +75,6 @@ async function fetchJSON<T>(url: string, timeoutMs = 12000): Promise<T> {
   }
 }
 
-/** Tarikh hari ini (00:00) dalam zon Asia/Kuala_Lumpur, format YYYY-MM-DD */
-function tarikhHariIniMY(): string {
-  const fmt = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Kuala_Lumpur",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-  return fmt.format(new Date()); // en-CA memberi YYYY-MM-DD
-}
-
 /** Tambah offset +08:00 pada masa tempatan Malaysia yang naif.
  *  Rentetan tarikh sahaja (YYYY-MM-DD) ditambah masa T00:00:00 supaya sah di-parse. */
 function isoMY(naif: string | null): string | null {
@@ -121,10 +98,7 @@ function petakanStesen(s: StesenMentah): StesenIPU {
   };
 }
 
-export async function GET(req: NextRequest) {
-  const searchParams = req.nextUrl.searchParams;
-  const trendStateId = searchParams.get("trendStateId");
-
+export async function GET() {
   try {
     const { mapcaqm } = await denganCache("utama", async () => {
       const mapRes = await fetchJSON<{ data: StesenMentah[] }>(
@@ -150,34 +124,6 @@ export async function GET(req: NextRequest) {
         kelas: s.kelas,
       }));
 
-    let trend: TitikTrend[] | null = null;
-    let trendStation: string | null = null;
-    if (trendStateId) {
-      const stateId = Number(trendStateId);
-      if (!Number.isNaN(stateId)) {
-        try {
-          const dt = `${tarikhHariIniMY()}T00:00:00`;
-          const t = await denganCache(`trend-${stateId}-${tarikhHariIniMY()}`, () =>
-            fetchJSON<{ highcharts_bar: TrendMentah[] }>(
-              `${BASE_APIMS}/datatrendchart?stateid=${stateId}&datetime=${dt}`,
-            ),
-          );
-          const bar = t.highcharts_bar ?? [];
-          if (bar.length > 0) {
-            trendStation = bar[0]?.STATION_ID ?? null;
-            trend = bar
-              .map((p) => ({
-                masa: `${p.DATETIME}+08:00`,
-                ipu: p.API != null ? Number(p.API) : null,
-              }))
-              .sort((a, b) => new Date(a.masa).getTime() - new Date(b.masa).getTime());
-          }
-        } catch {
-          // trend bersifat tambahan - abaikan jika gagal
-        }
-      }
-    }
-
     return NextResponse.json(
       {
         ok: true,
@@ -185,8 +131,6 @@ export async function GET(req: NextRequest) {
         updatedAt: new Date().toISOString(),
         stations,
         ranking,
-        trend,
-        trendStation,
       },
       { headers: { "Cache-Control": "public, max-age=120, stale-while-revalidate=300" } },
     );

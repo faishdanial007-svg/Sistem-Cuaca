@@ -40,7 +40,6 @@ import {
 import {
   IkonCuaca,
   SkalaIPU,
-  Sparkline,
   KadSkeleton,
   KadRalat,
   Kerangka,
@@ -76,8 +75,6 @@ interface ResponIPU {
     pencemar: string | null;
     kelas: string | null;
   }[];
-  trend: { masa: string; ipu: number | null }[] | null;
-  trendStation: string | null;
   ralat?: string;
 }
 
@@ -122,7 +119,6 @@ export default function HalamanCuaca() {
   const [muatCuaca, setMuatCuaca] = useState(true);
   const [ralatIPU, setRalatIPU] = useState<string | null>(null);
   const [ralatCuaca, setRalatCuaca] = useState<string | null>(null);
-  const [trend, setTrend] = useState<{ masa: string; ipu: number | null }[] | null>(null);
   const [segarkan, setSegarkan] = useState(false);
   const [masaKemasKini, setMasaKemasKini] = useState<string | null>(null);
   const pertamaKali = useRef(true);
@@ -203,26 +199,6 @@ export default function HalamanCuaca() {
     }
     return terbaik;
   }, [dataIPU, lokasi.lat, lokasi.lon]);
-
-  // ---------- trend 24 jam untuk negeri stesen terdekat ----------
-  useEffect(() => {
-    setTrend(null);
-    if (!stesenTerdekat) return;
-    const stateId = stesenTerdekat.stateId;
-    let batal = false;
-    (async () => {
-      try {
-        const res = await fetch(`/api/ipu?trendStateId=${stateId}`, { cache: "no-store" });
-        const json = (await res.json()) as ResponIPU;
-        if (!batal && res.ok && json.ok && json.trend) setTrend(json.trend);
-      } catch {
-        // trend tidak kritikal
-      }
-    })();
-    return () => {
-      batal = true;
-    };
-  }, [stesenTerdekat]);
 
   // ---------- nilai terbitan ----------
   const nilaiIPU = stesenTerdekat?.ipu ?? null;
@@ -364,7 +340,7 @@ export default function HalamanCuaca() {
                 </div>
 
                 {muatIPU && !dataIPU ? (
-                  <KadSkeleton tinggi="h-44" />
+                  <KadSkeleton tinggi="h-40" />
                 ) : ralatIPU ? (
                   <div className="mt-4">
                     <KadRalat mesej={ralatIPU} onCubaSemula={() => muatIPUSekarang()} />
@@ -416,48 +392,6 @@ export default function HalamanCuaca() {
                       warnaLabel={gaya?.teks}
                       warnaJulat={gaya?.kurang}
                     />
-
-                    {/* Trend 24 jam */}
-                    <div
-                      className="mt-4 border-t pt-3"
-                      style={{ borderColor: gaya?.bingkai ?? "rgba(255,255,255,0.7)" }}
-                    >
-                      <div className="flex items-baseline justify-between gap-2">
-                        <p
-                          className="text-[11px] font-bold uppercase tracking-[0.14em]"
-                          style={{ color: gaya?.sub ?? "#B0723A" }}
-                        >
-                          Trend IPU 24 Jam
-                        </p>
-                        {trend && trend.length > 1 && (
-                          <p
-                            className="text-right text-[10.5px] leading-tight"
-                            style={{ color: gaya?.kurang ?? "#9A7350" }}
-                          >
-                            {(() => {
-                              const potong = trend.slice(-24);
-                              const mula = potong[0];
-                              const akhir = potong[potong.length - 1];
-                              const hariMula = formatTarikhPendek(mula.masa);
-                              const hariAkhir = formatTarikhPendek(akhir.masa);
-                              return hariMula === hariAkhir
-                                ? `${formatJam(mula.masa)} – ${formatJam(akhir.masa)}`
-                                : `${hariMula} ${formatJam(mula.masa)} – ${formatJam(akhir.masa)}`;
-                            })()}
-                          </p>
-                        )}
-                      </div>
-                      {trend && trend.length > 1 ? (
-                        <Sparkline
-                          nilai={trend.slice(-24).map((t) => t.ipu)}
-                          warnaGaris={gaya?.garisGraf}
-                        />
-                      ) : (
-                        <div className="flex h-16 items-center justify-center">
-                          <Kerangka className="h-3 w-40" />
-                        </div>
-                      )}
-                    </div>
                   </>
                 )}
               </div>

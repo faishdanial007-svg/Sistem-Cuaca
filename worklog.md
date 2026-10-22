@@ -38,3 +38,22 @@ Stage Summary:
 - Kad IPU kini berwarna penuh ikut tahap IPU secara automatik
 - Kedudukan IPU Tertinggi memaparkan stesen paling terjejas (kuning/oren/merah)
 - Ramalan 7 hari disahkan data sebenar Open-Meteo dan dilabel sumber
+
+---
+Task ID: 3
+Agent: Z.ai (utama)
+Task: Buang bahagian "Trend IPU 24 Jam" daripada sistem Cuaca & IPU (permintaan pengguna: "trend ipu 24 jam buang")
+
+Work Log:
+- page.tsx: buang medan `trend`/`trendStation` daripada interface ResponIPU, state `trend`, useEffect fetch trend, blok JSX "Trend IPU 24 Jam", import `Sparkline`; laraskan skeleton kad IPU h-44 -> h-40
+- api/ipu/route.ts: buang cawangan `trendStateId`, interface TrendMentah/TitikTrend, fungsi tarikhHariIniMY(), medan trend/trendStation dalam respons; tanda tangan GET() tanpa param
+- panel-cuaca.tsx: buang komponen Sparkline sepenuhnya
+- lib/cuaca.ts: buang properti `garisGraf` daripada GayaKadTahap & semua entri GAYA_KAD (tidak lagi digunakan)
+- Lint bersih (eslint .), tsc tiada ralat dalam src/
+- Verifikasi agent-browser: desktop 1440px & mobile 390px — teks "Trend IPU 24 Jam" tiada, kad IPU kuning penuh (KL 140 Tidak Sihat), ranking menurun (Nilai 163 -> Bukit Rambai 159 -> Klang 155...), tiada ralat konsol
+
+Stage Summary:
+- Ciri Trend IPU 24 Jam dibuang sepenuhnya (UI + state + API proksi + komponen graf)
+- Ranking IPU Tertinggi kekal isihan menurun (Berbahaya/tertinggi di atas) seperti permintaan sebelum ini
+- Kad IPU kekal penuh warna ikut tahap (GAYA_KAD)
+- Semua data kekal sebenar: APIMS DOE (IPU) + Open-Meteo (cuaca/ramalan)

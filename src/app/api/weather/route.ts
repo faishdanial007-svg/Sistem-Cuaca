@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 // ============================================================
 // /api/weather - Proksi data cuaca Open-Meteo (percuma, tanpa kunci)
-// untuk lokasi di Malaysia: cuaca semasa + ramalan 7 hari + jam-harian.
+// untuk lokasi di Malaysia: cuaca semasa + ringkasan hari ini + jam-harian.
 // Cache dalam memori 10 minit.
 // ============================================================
 
@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
     `&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,wind_speed_10m` +
     `&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,sunrise,sunset,uv_index_max` +
     `&hourly=temperature_2m,weather_code,precipitation_probability` +
-    `&timezone=Asia%2FKuala_Lumpur&forecast_days=7`;
+    `&timezone=Asia%2FKuala_Lumpur&forecast_days=1`;
 
   try {
     const data = await denganCache(kunci, async () => {

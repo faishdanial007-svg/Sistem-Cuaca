@@ -73,3 +73,19 @@ Stage Summary:
 - Sistem kini fokus 2 negeri sahaja: Perak & Selangor, semua data sebenar (APIMS DOE + Open-Meteo)
 - Pemilihan negeri memaparkan SEMUA daerah berstesen dengan bacaan IPU masa nyata, warna ikut tahap, diisih paling teruk dahulu
 - Cuaca sekarang + ramalan menggunakan koordinat ibu negeri (Ipoh / Shah Alam)
+
+---
+Task ID: 5
+Agent: Z.ai (utama)
+Task: Buang seksyen "Ramalan 7 Hari" (permintaan: "ramalan 7 hari cuaca buang")
+
+Work Log:
+- page.tsx: buang keseluruhan <motion.section> RAMALAN 7 HARI (senarai 7 hari + skeleton + ralat + nota sumber) dan import formatHari/formatTarikhPendek; kekal hariIni = daily[0] untuk UV Maks / Peluang Hujan / Terbit-Terbenam dalam kad Cuaca Sekarang
+- api/weather/route.ts: forecast_days=7 -> 1 (Open-Meteo kini hanya pulangkan hari ini), komen dikemas kini
+- lib/cuaca.ts: buang formatHari, formatTarikhPendek dan pemalar HARI/BULAN (tiada lagi penggunaan); formatJam & bahagianZonMY dikekalkan
+- Lint bersih, tsc src/ bersih; agent-browser: desktop 1440 (Selangor kad kuning Klang 155, 4/4 daerah menurun, tiada Ramalan 7 Hari), mobile 390 (tiada overflow-x, Perak kad biru Manjung 95, 4 daerah menurun: Manjung 95, Kinta 82, Muallim 81, Larut Matang Selama 68); tiada ralat konsol
+
+Stage Summary:
+- Halaman kini: Kad IPU (penuh warna) -> Daerah Terjejas Jerebu -> Cuaca Sekarang + 12 Jam Akan Datang -> Footer; tiada lagi ramalan 7 hari
+- Payload Open-Meteo dikecilkan (forecast_days=1) memandangkan hanya data hari ini diperlukan untuk tile cuaca semasa
+- Semua kefungsian lain tidak berubah: kad penuh warna ikut tahap, daerah terjejas isih menurun, auto segar 10 minit, responsive

@@ -300,15 +300,10 @@ export const DAERAH_STESEN: Record<string, InfoStesenDaerah> = {
 };
 
 // ------------------------------------------------------------
-// Format tarikh / masa Bahasa Melayu (sentiasa zon Asia/Kuala_Lumpur,
+// Format masa Bahasa Melayu (sentiasa zon Asia/Kuala_Lumpur,
 // tidak terjejas zon masa peranti pengguna)
 // ------------------------------------------------------------
 const ZON_MY = "Asia/Kuala_Lumpur";
-const HARI = ["Ahad", "Isnin", "Selasa", "Rabu", "Khamis", "Jumaat", "Sabtu"];
-const BULAN = [
-  "Jan", "Feb", "Mac", "Apr", "Mei", "Jun",
-  "Jul", "Ogo", "Sep", "Okt", "Nov", "Dis",
-];
 
 function bahagianZonMY(iso: string): { hari: number; tarikh: number; bulan: number; jam: number; minit: number } {
   const d = new Date(iso);
@@ -332,15 +327,6 @@ function bahagianZonMY(iso: string): { hari: number; tarikh: number; bulan: numb
     jam: ambil("hour") % 24,
     minit: ambil("minute"),
   };
-}
-
-export function formatHari(iso: string): string {
-  return HARI[bahagianZonMY(iso).hari] ?? "—";
-}
-
-export function formatTarikhPendek(iso: string): string {
-  const b = bahagianZonMY(iso);
-  return `${b.tarikh} ${BULAN[b.bulan - 1] ?? ""}`;
 }
 
 export function formatJam(iso: string): string {

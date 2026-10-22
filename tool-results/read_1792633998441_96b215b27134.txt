@@ -1,0 +1,828 @@
+     1→"use client";
+     2→
+     3→// ============================================================
+     4→// Sistem Cuaca & IPU Malaysia - Halaman tunggal
+     5→// Data sebenar: APIMS DOE Malaysia (IPU/jerebu) + Open-Meteo (cuaca)
+     6→// Reka bentuk: gradien senja oren lembut, kontras mesra mata,
+     7→// responsive mobile-first.
+     8→// ============================================================
+     9→
+    10→import { useCallback, useEffect, useMemo, useState } from "react";
+    11→import { motion } from "framer-motion";
+    12→import {
+    13→  MapPin,
+    14→  RefreshCw,
+    15→  Droplets,
+    16→  Wind,
+    17→  Sunrise,
+    18→  Sunset,
+    19→  Thermometer,
+    20→  SunDim,
+    21→  Gauge,
+    22→  RotateCw,
+    23→} from "lucide-react";
+    24→
+    25→import {
+    26→  NEGERI_PILIHAN,
+    27→  DAERAH_STESEN,
+    28→  GAYA_KAD,
+    29→  infoKodCuaca,
+    30→  infoTahap,
+    31→  negeriById,
+    32→  peneranganPencemar,
+    33→  tahapDariNilai,
+    34→  formatHari,
+    35→  formatJam,
+    36→  formatTarikhPendek,
+    37→  type TahapIPU,
+    38→} from "@/lib/cuaca";
+    39→import {
+    40→  IkonCuaca,
+    41→  SkalaIPU,
+    42→  KadSkeleton,
+    43→  KadRalat,
+    44→  Kerangka,
+    45→  WARNA_NILAI_KAD,
+    46→} from "@/components/panel-cuaca";
+    47→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+    48→
+    49→// ------------------------------------------------------------
+    50→// Jenis data daripada API dalaman
+    51→// ------------------------------------------------------------
+    52→interface StesenKlien {
+    53→  id: string;
+    54→  lokasi: string;
+    55→  negeri: string;
+    56→  stateId: number;
+    57→  lat: number;
+    58→  lon: number;
+    59→  ipu: number | null;
+    60→  pencemar: string | null;
+    61→  kelas: string | null;
+    62→  masaBacaan: string | null;
+    63→}
+    64→
+    65→interface ResponIPU {
+    66→  ok: boolean;
+    67→  updatedAt: string;
+    68→  stations: StesenKlien[];
+    69→  ranking: {
+    70→    stesen: string;
+    71→    lokasi: string;
+    72→    negeri: string;
+    73→    ipu: number;
+    74→    pencemar: string | null;
+    75→    kelas: string | null;
+    76→  }[];
+    77→  ralat?: string;
+    78→}
+    79→
+    80→interface HariCuaca {
+    81→  tarikh: string;
+    82→  kod: number | null;
+    83→  tMaks: number | null;
+    84→  tMin: number | null;
+    85→  hujan: number | null;
+    86→  hujanMm: number | null;
+    87→  matahariTerbit: string;
+    88→  matahariTerbenam: string;
+    89→  uvMaks: number | null;
+    90→}
+    91→
+    92→interface ResponCuaca {
+    93→  ok: boolean;
+    94→  updatedAt: string;
+    95→  current: {
+    96→    masa: string;
+    97→    suhu: number | null;
+    98→    rasa: number | null;
+    99→    kelembapan: number | null;
+   100→    kod: number | null;
+   101→    siang: boolean;
+   102→    angin: number | null;
+   103→  };
+   104→  daily: HariCuaca[];
+   105→  hourly: { masa: string; suhu: number | null; kod: number | null; hujan: number | null }[];
+   106→  ralat?: string;
+   107→}
+   108→
+   109→interface StesenDaerah {
+   110→  id: string;
+   111→  tempat: string;
+   112→  daerah: string;
+   113→  ipu: number | null;
+   114→  pencemar: string | null;
+   115→  masaBacaan: string | null;
+   116→}
+   117→
+   118→interface KumpulanDaerah {
+   119→  daerah: string;
+   120→  stesen: StesenDaerah[];
+   121→  /** IPU tertinggi dalam daerah ini */
+   122→  maks: number; // -1 = tiada bacaan sah
+   123→  tahap: TahapIPU;
+   124→}
+   125→
+   126→const SELANG_AUTO = 10 * 60 * 1000; // 10 minit
+   127→
+   128→export default function HalamanCuaca() {
+   129→  const [negeriId, setNegeriId] = useState("selangor");
+   130→  const negeri = negeriById(negeriId);
+   131→
+   132→  const [dataIPU, setDataIPU] = useState<ResponIPU | null>(null);
+   133→  const [dataCuaca, setDataCuaca] = useState<ResponCuaca | null>(null);
+   134→  const [muatIPU, setMuatIPU] = useState(true);
+   135→  const [muatCuaca, setMuatCuaca] = useState(true);
+   136→  const [ralatIPU, setRalatIPU] = useState<string | null>(null);
+   137→  const [ralatCuaca, setRalatCuaca] = useState<string | null>(null);
+   138→  const [segarkan, setSegarkan] = useState(false);
+   139→  const [masaKemasKini, setMasaKemasKini] = useState<string | null>(null);
+   140→
+   141→  // ---------- pemuatan data ----------
+   142→  const muatIPUSekarang = useCallback(async (senyap = false) => {
+   143→    if (!senyap) setMuatIPU(true);
+   144→    setRalatIPU(null);
+   145→    try {
+   146→      const res = await fetch("/api/ipu", { cache: "no-store" });
+   147→      const json = (await res.json()) as ResponIPU;
+   148→      if (!res.ok || !json.ok) throw new Error(json.ralat ?? "HTTP ralat");
+   149→      setDataIPU(json);
+   150→      setMasaKemasKini(json.updatedAt);
+   151→    } catch (e) {
+   152→      setRalatIPU(e instanceof Error ? e.message : "Gagal memuatkan data IPU");
+   153→    } finally {
+   154→      setMuatIPU(false);
+   155→    }
+   156→  }, []);
+   157→
+   158→  const muatCuacaSekarang = useCallback(
+   159→    async (senyap = false) => {
+   160→      if (!senyap) setMuatCuaca(true);
+   161→      setRalatCuaca(null);
+   162→      try {
+   163→        const res = await fetch(`/api/weather?lat=${negeri.lat}&lon=${negeri.lon}`, {
+   164→          cache: "no-store",
+   165→        });
+   166→        const json = (await res.json()) as ResponCuaca;
+   167→        if (!res.ok || !json.ok) throw new Error(json.ralat ?? "HTTP ralat");
+   168→        setDataCuaca(json);
+   169→      } catch (e) {
+   170→        setRalatCuaca(e instanceof Error ? e.message : "Gagal memuatkan data cuaca");
+   171→      } finally {
+   172→        setMuatCuaca(false);
+   173→      }
+   174→    },
+   175→    [negeri.lat, negeri.lon],
+   176→  );
+   177→
+   178→  // Muat apabila negeri bertukar
+   179→  useEffect(() => {
+   180→    muatIPUSekarang();
+   181→    muatCuacaSekarang();
+   182→  }, [muatIPUSekarang, muatCuacaSekarang]);
+   183→
+   184→  // Auto segar setiap 10 minit
+   185→  useEffect(() => {
+   186→    const t = setInterval(() => {
+   187→      muatIPUSekarang(true);
+   188→      muatCuacaSekarang(true);
+   189→    }, SELANG_AUTO);
+   190→    return () => clearInterval(t);
+   191→  }, [muatIPUSekarang, muatCuacaSekarang]);
+   192→
+   193→  // Butang segarkan manual
+   194→  const padaSegarkan = useCallback(async () => {
+   195→    setSegarkan(true);
+   196→    await Promise.all([muatIPUSekarang(true), muatCuacaSekarang(true)]);
+   197→    setTimeout(() => setSegarkan(false), 600);
+   198→  }, [muatIPUSekarang, muatCuacaSekarang]);
+   199→
+   200→  // ---------- kumpul stesen mengikut daerah bagi negeri terpilih ----------
+   201→  const kumpulanDaerah = useMemo<KumpulanDaerah[]>(() => {
+   202→    const senarai = (dataIPU?.stations ?? []).filter(
+   203→      (s) =>
+   204→        s.negeri.trim().toUpperCase() === negeri.idApims &&
+   205→        DAERAH_STESEN[s.id] != null,
+   206→    );
+   207→    const peta = new Map<string, StesenDaerah[]>();
+   208→    for (const s of senarai) {
+   209→      const info = DAERAH_STESEN[s.id];
+   210→      const senaraiDlm = peta.get(info.daerah) ?? [];
+   211→      senaraiDlm.push({
+   212→        id: s.id,
+   213→        tempat: info.tempat,
+   214→        daerah: info.daerah,
+   215→        ipu: s.ipu,
+   216→        pencemar: s.pencemar,
+   217→        masaBacaan: s.masaBacaan,
+   218→      });
+   219→      peta.set(info.daerah, senaraiDlm);
+   220→    }
+   221→    const kumpulan: KumpulanDaerah[] = [];
+   222→    for (const [daerah, stesen] of peta) {
+   223→      const nilaiSah = stesen
+   224→        .map((x) => x.ipu)
+   225→        .filter((v): v is number => v != null);
+   226→      const maks = nilaiSah.length > 0 ? Math.max(...nilaiSah) : -1;
+   227→      kumpulan.push({
+   228→        daerah,
+   229→        stesen: [...stesen].sort((a, b) => (b.ipu ?? -1) - (a.ipu ?? -1)),
+   230→        maks,
+   231→        tahap: tahapDariNilai(maks >= 0 ? maks : null),
+   232→      });
+   233→    }
+   234→    // Daerah paling teruk dahulu (berbahaya/tidak sihat di atas)
+   235→    return kumpulan.sort((a, b) => b.maks - a.maks);
+   236→  }, [dataIPU, negeri.idApims]);
+   237→
+   238→  // ---------- nilai terbitan ----------
+   239→  const daerahTeruk = kumpulanDaerah.find((k) => k.maks >= 0) ?? null;
+   240→  const stesenTeruk = daerahTeruk?.stesen[0] ?? null;
+   241→  const nilaiIPU = daerahTeruk && daerahTeruk.maks >= 0 ? daerahTeruk.maks : null;
+   242→  const tahap: TahapIPU = tahapDariNilai(nilaiIPU);
+   243→  const info = infoTahap(tahap);
+   244→  // Gaya kad penuh ikut tahap (kuning bila Tidak Sihat, biru bila Sederhana, dll.)
+   245→  const gaya = tahap !== "tiada" ? GAYA_KAD[tahap as Exclude<TahapIPU, "tiada">] : null;
+   246→  const labelTahap = info?.label ?? "Tiada Bacaan";
+   247→  const bilDaerah = kumpulanDaerah.length;
+   248→  const bilTerjejas = kumpulanDaerah.filter((k) => k.maks > 50).length;
+   249→  const bilStesen = kumpulanDaerah.reduce((n, k) => n + k.stesen.length, 0);
+   250→
+   251→  const cuacaSekarang = dataCuaca?.current ?? null;
+   252→  const infoCuacaSekarang = infoKodCuaca(cuacaSekarang?.kod);
+   253→  const hariIni = dataCuaca?.daily?.[0] ?? null;
+   254→
+   255→  const anim = (delay = 0) => ({
+   256→    initial: { opacity: 0, y: 16 },
+   257→    animate: { opacity: 1, y: 0 },
+   258→    transition: { duration: 0.45, delay, ease: "easeOut" as const },
+   259→  });
+   260→
+   261→  return (
+   262→    <div
+   263→      className="relative min-h-screen w-full overflow-x-clip"
+   264→      style={{
+   265→        background:
+   266→          "linear-gradient(168deg, #FFF4E3 0%, #FFE8CC 34%, #FFD8B2 62%, #FFC48E 88%, #FBB878 100%)",
+   267→      }}
+   268→    >
+   269→      {/* Hiasan latar lembut */}
+   270→      <div
+   271→        aria-hidden="true"
+   272→        className="pointer-events-none absolute inset-0 overflow-hidden"
+   273→      >
+   274→        <div
+   275→          className="absolute -top-24 right-[-10%] h-72 w-72 rounded-full opacity-60 blur-3xl sm:h-96 sm:w-96"
+   276→          style={{ background: "radial-gradient(circle, #FFD9A8 0%, rgba(255,217,168,0) 70%)" }}
+   277→        />
+   278→        <div
+   279→          className="absolute bottom-[-8%] left-[-12%] h-80 w-80 rounded-full opacity-50 blur-3xl"
+   280→          style={{ background: "radial-gradient(circle, #FFE9C9 0%, rgba(255,233,201,0) 70%)" }}
+   281→        />
+   282→      </div>
+   283→
+   284→      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-md flex-col px-4 pb-6 pt-6 sm:max-w-xl sm:px-6 lg:max-w-5xl lg:px-8">
+   285→        {/* ================= HEADER ================= */}
+   286→        <motion.header {...anim(0)} className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+   287→          <div>
+   288→            <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#B0723A]">
+   289→              Perak &amp; Selangor · Masa Nyata
+   290→            </p>
+   291→            <h1 className="mt-0.5 text-[26px] font-bold leading-tight text-[#45220D] sm:text-3xl">
+   292→              Cuaca &amp; Jerebu
+   293→            </h1>
+   294→          </div>
+   295→          <div className="flex items-center gap-2">
+   296→            <div className="relative flex-1 sm:flex-none sm:w-[228px]">
+   297→              <MapPin
+   298→                size={15}
+   299→                className="pointer-events-none absolute left-3.5 top-1/2 z-10 -translate-y-1/2 text-[#B0723A]"
+   300→                aria-hidden="true"
+   301→              />
+   302→              <Select value={negeriId} onValueChange={setNegeriId}>
+   303→                <SelectTrigger
+   304→                  aria-label="Pilih negeri"
+   305→                  className="h-11 w-full rounded-full border-white/70 bg-white/60 pl-9 pr-3 text-[15px] font-semibold text-[#45220D] shadow-sm backdrop-blur-xl focus:ring-2 focus:ring-[#E89A1D]/50 data-[placeholder]:text-[#9A7350]"
+   306→                >
+   307→                  <SelectValue placeholder="Pilih negeri" />
+   308→                </SelectTrigger>
+   309→                <SelectContent className="max-h-72 rounded-2xl border-white/70 bg-white/95 backdrop-blur-xl">
+   310→                  {NEGERI_PILIHAN.map((l) => (
+   311→                    <SelectItem
+   312→                      key={l.id}
+   313→                      value={l.id}
+   314→                      textValue={l.nama}
+   315→                      className="rounded-xl text-[15px] text-[#45220D] focus:bg-[#FFE8CC] data-[highlighted]:bg-[#FFE8CC]"
+   316→                    >
+   317→                      {l.nama}
+   318→                    </SelectItem>
+   319→                  ))}
+   320→                </SelectContent>
+   321→              </Select>
+   322→            </div>
+   323→            <button
+   324→              onClick={padaSegarkan}
+   325→              aria-label="Segarkan data sekarang"
+   326→              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/70 bg-white/60 text-[#B0723A] shadow-sm backdrop-blur-xl transition hover:bg-white/85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B0723A] active:scale-95"
+   327→            >
+   328→              <RefreshCw size={18} className={segarkan ? "animate-spin" : ""} aria-hidden="true" />
+   329→            </button>
+   330→          </div>
+   331→        </motion.header>
+   332→
+   333→        {/* ================= KANDUNGAN UTAMA ================= */}
+   334→        <main className="mt-4 grid flex-1 grid-cols-1 gap-4 sm:mt-5 sm:gap-5 lg:grid-cols-2 lg:gap-6">
+   335→          {/* ============ KAD IPU - IKHTISAR NEGERI (penuh lebar) ============ */}
+   336→          <motion.section {...anim(0.05)} className="lg:col-span-2" aria-label="Indeks Pencemaran Udara">
+   337→              <div
+   338→                className="rounded-[28px] border p-5 shadow-[0_14px_40px_-16px_rgba(146,84,28,0.28)] backdrop-blur-xl transition-colors duration-500 sm:p-6"
+   339→                style={{
+   340→                  backgroundColor: gaya?.latar ?? "rgba(255,255,255,0.6)",
+   341→                  borderColor: gaya?.bingkai ?? "rgba(255,255,255,0.7)",
+   342→                }}
+   343→              >
+   344→                <div className="flex items-start justify-between gap-3">
+   345→                  <div className="min-w-0">
+   346→                    <p
+   347→                      className="flex items-center gap-1.5 text-[13px] font-bold uppercase tracking-[0.14em]"
+   348→                      style={{ color: gaya?.sub ?? "#B0723A" }}
+   349→                    >
+   350→                      <Gauge size={14} aria-hidden="true" /> Bacaan IPU · {negeri.nama}
+   351→                    </p>
+   352→                    <p
+   353→                      className="mt-1 truncate text-xl font-bold"
+   354→                      style={{ color: gaya?.teks ?? "#45220D" }}
+   355→                    >
+   356→                      {daerahTeruk ? daerahTeruk.daerah : negeri.nama}
+   357→                    </p>
+   358→                    <p className="text-xs" style={{ color: gaya?.kurang ?? "#9A7350" }}>
+   359→                      {stesenTeruk
+   360→                        ? `Stesen ${stesenTeruk.id} · ${stesenTeruk.tempat}`
+   361→                        : "Menunggu data stesen…"}
+   362→                    </p>
+   363→                  </div>
+   364→                  <span
+   365→                    className="shrink-0 rounded-full px-3.5 py-1.5 text-[13px] font-bold shadow-sm"
+   366→                    style={
+   367→                      gaya
+   368→                        ? { backgroundColor: gaya.chipLatar, color: gaya.chipTeks }
+   369→                        : { backgroundColor: "rgba(141,131,120,0.2)", color: "#6B5E52" }
+   370→                    }
+   371→                  >
+   372→                    {labelTahap}
+   373→                  </span>
+   374→                </div>
+   375→
+   376→                {muatIPU && !dataIPU ? (
+   377→                  <KadSkeleton tinggi="h-40" />
+   378→                ) : ralatIPU ? (
+   379→                  <div className="mt-4">
+   380→                    <KadRalat mesej={ralatIPU} onCubaSemula={() => muatIPUSekarang()} />
+   381→                  </div>
+   382→                ) : (
+   383→                  <>
+   384→                    <div className="mt-3 flex items-end justify-between gap-4">
+   385→                      <div className="flex items-end gap-2.5">
+   386→                        <span
+   387→                          className="text-[68px] font-bold leading-none tracking-tight sm:text-[76px]"
+   388→                          style={{ color: gaya?.teks ?? "#45220D" }}
+   389→                        >
+   390→                          {nilaiIPU ?? "--"}
+   391→                        </span>
+   392→                        <span
+   393→                          className="pb-2.5 text-sm font-semibold"
+   394→                          style={{ color: gaya?.kurang ?? "#9A7350" }}
+   395→                        >
+   396→                          IPU
+   397→                        </span>
+   398→                      </div>
+   399→                      <div
+   400→                        className="pb-2 text-right text-[11.5px] leading-snug"
+   401→                        style={{ color: gaya?.kurang ?? "#9A7350" }}
+   402→                      >
+   403→                        {stesenTeruk?.masaBacaan && (
+   404→                          <p>
+   405→                            Bacaan jam{" "}
+   406→                            <b style={{ color: gaya?.teks ?? "#7A4A28" }}>
+   407→                              {formatJam(stesenTeruk.masaBacaan)}
+   408→                            </b>
+   409→                          </p>
+   410→                        )}
+   411→                        {peneranganPencemar(stesenTeruk?.pencemar) ? (
+   412→                          <p>
+   413→                            Dominan:{" "}
+   414→                            <b style={{ color: gaya?.teks ?? "#7A4A28" }}>
+   415→                              {peneranganPencemar(stesenTeruk?.pencemar)}
+   416→                            </b>
+   417→                          </p>
+   418→                        ) : (
+   419→                          <p>Tiada pencemar dominan</p>
+   420→                        )}
+   421→                      </div>
+   422→                    </div>
+   423→
+   424→                    <SkalaIPU
+   425→                      nilai={nilaiIPU}
+   426→                      warnaLabel={gaya?.teks}
+   427→                      warnaJulat={gaya?.kurang}
+   428→                    />
+   429→
+   430→                    <div className="mt-4 grid grid-cols-2 gap-2 sm:max-w-md">
+   431→                      <div
+   432→                        className="rounded-2xl px-3 py-2"
+   433→                        style={{ backgroundColor: gaya?.tile ?? "rgba(255,255,255,0.45)" }}
+   434→                      >
+   435→                        <p
+   436→                          className="text-[11px] font-medium"
+   437→                          style={{ color: gaya?.kurang ?? "#9A7350" }}
+   438→                        >
+   439→                          Daerah terjejas jerebu
+   440→                        </p>
+   441→                        <p
+   442→                          className="text-[15px] font-bold"
+   443→                          style={{ color: gaya?.teks ?? "#45220D" }}
+   444→                        >
+   445→                          {bilTerjejas} / {bilDaerah} daerah
+   446→                        </p>
+   447→                      </div>
+   448→                      <div
+   449→                        className="rounded-2xl px-3 py-2"
+   450→                        style={{ backgroundColor: gaya?.tile ?? "rgba(255,255,255,0.45)" }}
+   451→                      >
+   452→                        <p
+   453→                          className="text-[11px] font-medium"
+   454→                          style={{ color: gaya?.kurang ?? "#9A7350" }}
+   455→                        >
+   456→                          Stesen DOE dipantau
+   457→                        </p>
+   458→                        <p
+   459→                          className="text-[15px] font-bold"
+   460→                          style={{ color: gaya?.teks ?? "#45220D" }}
+   461→                        >
+   462→                          {bilStesen} stesen
+   463→                        </p>
+   464→                      </div>
+   465→                    </div>
+   466→                  </>
+   467→                )}
+   468→              </div>
+   469→            </motion.section>
+   470→
+   471→            {/* ============ DAERAH TERJEJAS JEREBU ============ */}
+   472→            <motion.section
+   473→              {...anim(0.1)}
+   474→              className="lg:col-span-2"
+   475→              aria-label="Daerah terjejas jerebu"
+   476→            >
+   477→              <div className="rounded-[28px] border border-white/70 bg-white/60 p-5 shadow-[0_14px_40px_-16px_rgba(146,84,28,0.28)] backdrop-blur-xl sm:p-6">
+   478→                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+   479→                  <p className="flex items-center gap-1.5 text-[13px] font-bold uppercase tracking-[0.14em] text-[#B0723A]">
+   480→                    <MapPin size={14} aria-hidden="true" /> Daerah Terjejas Jerebu ·{" "}
+   481→                    {negeri.nama}
+   482→                  </p>
+   483→                  {bilDaerah > 0 && (
+   484→                    <p className="text-[11px] font-medium text-[#9A7350]">
+   485→                      {bilTerjejas} daripada {bilDaerah} daerah melebihi bacaan Baik
+   486→                    </p>
+   487→                  )}
+   488→                </div>
+   489→
+   490→                {muatIPU && !dataIPU ? (
+   491→                  <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+   492→                    {Array.from({ length: 6 }).map((_, i) => (
+   493→                      <Kerangka key={i} className="h-[118px] w-full rounded-[22px]" />
+   494→                    ))}
+   495→                  </div>
+   496→                ) : kumpulanDaerah.length === 0 ? (
+   497→                  <p className="mt-4 text-sm text-[#9A7350]">
+   498→                    Tiada data stesen daerah buat masa ini. Sila cuba segarkan.
+   499→                  </p>
+   500→                ) : (
+   501→                  <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+   502→                    {kumpulanDaerah.map((k, i) => {
+   503→                      const infoD = infoTahap(k.tahap);
+   504→                      const aksen = infoD?.warna ?? "#8D8378";
+   505→                      return (
+   506→                        <div
+   507→                          key={k.daerah}
+   508→                          className="relative rounded-[22px] border p-4"
+   509→                          style={{
+   510→                            backgroundColor:
+   511→                              infoD?.warnaLatar ?? "rgba(141,131,120,0.12)",
+   512→                            borderColor: `${aksen}55`,
+   513→                          }}
+   514→                        >
+   515→                          {i === 0 && bilDaerah > 1 && k.maks >= 0 && (
+   516→                            <span
+   517→                              className="absolute -top-2.5 right-4 rounded-full px-2.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wider text-white shadow-sm"
+   518→                              style={{ backgroundColor: aksen }}
+   519→                            >
+   520→                              Tertinggi
+   521→                            </span>
+   522→                          )}
+   523→                          <div className="flex items-start justify-between gap-2">
+   524→                            <div className="min-w-0">
+   525→                              <p className="truncate text-[16px] font-bold text-[#45220D]">
+   526→                                {k.daerah}
+   527→                              </p>
+   528→                              <p className="text-[10.5px] font-medium text-[#9A7350]">
+   529→                                {k.stesen.length === 1
+   530→                                  ? "1 stesen DOE"
+   531→                                  : `${k.stesen.length} stesen DOE`}
+   532→                              </p>
+   533→                            </div>
+   534→                            <div className="shrink-0 text-right">
+   535→                              <span
+   536→                                className="inline-flex rounded-full px-3 py-1 text-[15px] font-bold shadow-sm"
+   537→                                style={
+   538→                                  infoD
+   539→                                    ? {
+   540→                                        backgroundColor: infoD.warna,
+   541→                                        color: infoD.warnaTeks,
+   542→                                      }
+   543→                                    : {
+   544→                                        backgroundColor: "rgba(141,131,120,0.2)",
+   545→                                        color: "#6B5E52",
+   546→                                      }
+   547→                                }
+   548→                              >
+   549→                                {k.maks >= 0 ? k.maks : "--"}
+   550→                              </span>
+   551→                              <p
+   552→                                className="mt-0.5 text-[9.5px] font-bold uppercase tracking-wide"
+   553→                                style={{ color: aksen }}
+   554→                              >
+   555→                                {infoD?.label ?? "Tiada Bacaan"}
+   556→                              </p>
+   557→                            </div>
+   558→                          </div>
+   559→
+   560→                          <div className="mt-2.5 flex flex-col gap-1.5">
+   561→                            {k.stesen.map((s) => {
+   562→                              const tS = tahapDariNilai(s.ipu);
+   563→                              const infoS = infoTahap(tS);
+   564→                              return (
+   565→                                <div
+   566→                                  key={s.id}
+   567→                                  className="flex items-center justify-between gap-2 rounded-xl bg-white/55 px-3 py-1.5"
+   568→                                >
+   569→                                  <p className="min-w-0 truncate text-[12.5px] font-medium text-[#5C3A1E]">
+   570→                                    {s.tempat}
+   571→                                  </p>
+   572→                                  <p
+   573→                                    className="shrink-0 text-[13.5px] font-bold"
+   574→                                    style={{
+   575→                                      color: infoS
+   576→                                        ? WARNA_NILAI_KAD[
+   577→                                            tS as Exclude<TahapIPU, "tiada">
+   578→                                          ]
+   579→                                        : "#8D8378",
+   580→                                    }}
+   581→                                  >
+   582→                                    {s.ipu ?? "—"}
+   583→                                  </p>
+   584→                                </div>
+   585→                              );
+   586→                            })}
+   587→                          </div>
+   588→                        </div>
+   589→                      );
+   590→                    })}
+   591→                  </div>
+   592→                )}
+   593→
+   594→                {dataIPU && kumpulanDaerah.length > 0 && (
+   595→                  <p className="mt-3.5 flex items-center gap-1.5 text-[11px] text-[#9A7350]">
+   596→                    <RotateCw size={11} aria-hidden="true" />
+   597→                    Bacaan masa nyata APIMS DOE · auto segar setiap 10 minit
+   598→                  </p>
+   599→                )}
+   600→              </div>
+   601→            </motion.section>
+   602→
+   603→            {/* ============ CUACA SEMASA ============ */}
+   604→            <motion.section {...anim(0.15)} aria-label="Cuaca semasa">
+   605→              <div className="rounded-[28px] border border-white/70 bg-white/60 p-5 shadow-[0_14px_40px_-16px_rgba(146,84,28,0.28)] backdrop-blur-xl sm:p-6">
+   606→                <p className="flex items-center gap-1.5 text-[13px] font-bold uppercase tracking-[0.14em] text-[#B0723A]">
+   607→                  <Thermometer size={14} aria-hidden="true" /> Cuaca Sekarang · {negeri.ibu}
+   608→                </p>
+   609→                {muatCuaca && !dataCuaca ? (
+   610→                  <KadSkeleton tinggi="h-40" />
+   611→                ) : ralatCuaca ? (
+   612→                  <div className="mt-4">
+   613→                    <KadRalat mesej={ralatCuaca} onCubaSemula={() => muatCuacaSekarang()} />
+   614→                  </div>
+   615→                ) : (
+   616→                  <>
+   617→                    <div className="mt-2 flex items-center justify-between gap-3">
+   618→                      <div>
+   619→                        <p className="text-[52px] font-bold leading-none tracking-tight text-[#45220D]">
+   620→                          {cuacaSekarang?.suhu != null
+   621→                            ? Math.round(cuacaSekarang.suhu)
+   622→                            : "--"}
+   623→                          °C
+   624→                        </p>
+   625→                        <p className="mt-1.5 text-[15px] font-semibold text-[#7A4A28]">
+   626→                          {infoCuacaSekarang.label}
+   627→                        </p>
+   628→                        <p className="text-xs text-[#9A7350]">
+   629→                          Rasa seperti{" "}
+   630→                          {cuacaSekarang?.rasa != null
+   631→                            ? `${Math.round(cuacaSekarang.rasa)}°`
+   632→                            : "--"}
+   633→                          ° · {cuacaSekarang?.siang ? "Siang" : "Malam"}
+   634→                        </p>
+   635→                      </div>
+   636→                      <IkonCuaca ikon={infoCuacaSekarang.ikon} size={84} />
+   637→                    </div>
+   638→
+   639→                    <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+   640→                      {[
+   641→                        {
+   642→                          ikon: <Droplets size={15} aria-hidden="true" />,
+   643→                          label: "Kelembapan",
+   644→                          nilai:
+   645→                            cuacaSekarang?.kelembapan != null
+   646→                              ? `${Math.round(cuacaSekarang.kelembapan)}%`
+   647→                              : "--",
+   648→                        },
+   649→                        {
+   650→                          ikon: <Wind size={15} aria-hidden="true" />,
+   651→                          label: "Angin",
+   652→                          nilai:
+   653→                            cuacaSekarang?.angin != null
+   654→                              ? `${Math.round(cuacaSekarang.angin)} km/j`
+   655→                              : "--",
+   656→                        },
+   657→                        {
+   658→                          ikon: <SunDim size={15} aria-hidden="true" />,
+   659→                          label: "UV Maks",
+   660→                          nilai:
+   661→                            hariIni?.uvMaks != null ? `${Math.round(hariIni.uvMaks)}` : "--",
+   662→                        },
+   663→                        {
+   664→                          ikon: <Droplets size={15} aria-hidden="true" />,
+   665→                          label: "Peluang Hujan",
+   666→                          nilai: hariIni?.hujan != null ? `${hariIni.hujan}%` : "--",
+   667→                        },
+   668→                      ].map((s) => (
+   669→                        <div
+   670→                          key={s.label}
+   671→                          className="rounded-2xl border border-white/60 bg-white/55 px-3 py-2.5"
+   672→                        >
+   673→                          <p className="flex items-center gap-1.5 text-[11px] font-medium text-[#9A7350]">
+   674→                            {s.ikon}
+   675→                            {s.label}
+   676→                          </p>
+   677→                          <p className="mt-0.5 text-[15px] font-bold text-[#45220D]">
+   678→                            {s.nilai}
+   679→                          </p>
+   680→                        </div>
+   681→                      ))}
+   682→                    </div>
+   683→
+   684→                    {hariIni && (
+   685→                      <div className="mt-3 flex items-center justify-between text-xs font-medium text-[#9A7350]">
+   686→                        <span className="flex items-center gap-1.5">
+   687→                          <Sunrise size={14} className="text-[#E89A1D]" aria-hidden="true" />
+   688→                          Terbit {formatJam(hariIni.matahariTerbit)}
+   689→                        </span>
+   690→                        <span className="flex items-center gap-1.5">
+   691→                          <Sunset size={14} className="text-[#C96F2E]" aria-hidden="true" />
+   692→                          Terbenam {formatJam(hariIni.matahariTerbenam)}
+   693→                        </span>
+   694→                      </div>
+   695→                    )}
+   696→                  </>
+   697→                )}
+   698→              </div>
+   699→            </motion.section>
+   700→
+   701→            {/* ============ JAM-HARIAN (12 JAM) ============ */}
+   702→            <motion.section {...anim(0.2)} aria-label="Ramalan jam-harian">
+   703→              <div className="rounded-[28px] border border-white/70 bg-white/60 p-5 shadow-[0_14px_40px_-16px_rgba(146,84,28,0.28)] backdrop-blur-xl sm:p-6">
+   704→                <p className="text-[13px] font-bold uppercase tracking-[0.14em] text-[#B0723A]">
+   705→                  12 Jam Akan Datang
+   706→                </p>
+   707→                {muatCuaca && !dataCuaca ? (
+   708→                  <div className="mt-3 flex gap-2">
+   709→                    {Array.from({ length: 6 }).map((_, i) => (
+   710→                      <Kerangka key={i} className="h-[86px] w-16 shrink-0 rounded-2xl" />
+   711→                    ))}
+   712→                  </div>
+   713→                ) : (
+   714→                  <div className="scrollbar-lembut -mx-1 mt-3 flex gap-2 overflow-x-auto px-1 pb-1">
+   715→                    {(dataCuaca?.hourly ?? []).map((h) => {
+   716→                      const infoH = infoKodCuaca(h.kod);
+   717→                      return (
+   718→                        <div
+   719→                          key={h.masa}
+   720→                          className="flex w-[66px] shrink-0 flex-col items-center gap-1.5 rounded-2xl border border-white/60 bg-white/55 py-3"
+   721→                        >
+   722→                          <p className="text-[11px] font-semibold text-[#9A7350]">
+   723→                            {formatJam(h.masa)}
+   724→                          </p>
+   725→                          <IkonCuaca ikon={infoH.ikon} size={24} />
+   726→                          <p className="text-[14px] font-bold text-[#45220D]">
+   727→                            {h.suhu != null ? Math.round(h.suhu) : "--"}°
+   728→                          </p>
+   729→                          <p className="flex items-center gap-0.5 text-[10px] text-[#7C8FA5]">
+   730→                            <Droplets size={9} aria-hidden="true" />
+   731→                            {h.hujan != null ? `${h.hujan}%` : "--"}
+   732→                          </p>
+   733→                        </div>
+   734→                      );
+   735→                    })}
+   736→                  </div>
+   737→                )}
+   738→              </div>
+   739→            </motion.section>
+   740→
+   741→            {/* ============ RAMALAN 7 HARI ============ */}
+   742→            <motion.section
+   743→              {...anim(0.25)}
+   744→              className="lg:col-span-2"
+   745→              aria-label="Ramalan cuaca 7 hari"
+   746→            >
+   747→              <div className="rounded-[28px] border border-white/70 bg-white/60 p-5 shadow-[0_14px_40px_-16px_rgba(146,84,28,0.28)] backdrop-blur-xl sm:p-6">
+   748→                <p className="text-[13px] font-bold uppercase tracking-[0.14em] text-[#B0723A]">
+   749→                  Ramalan 7 Hari · {negeri.nama}
+   750→                </p>
+   751→                {muatCuaca && !dataCuaca ? (
+   752→                  <div className="mt-4 flex flex-col gap-2.5">
+   753→                    {Array.from({ length: 7 }).map((_, i) => (
+   754→                      <Kerangka key={i} className="h-[58px] w-full rounded-[22px]" />
+   755→                    ))}
+   756→                  </div>
+   757→                ) : ralatCuaca ? (
+   758→                  <div className="mt-4">
+   759→                    <KadRalat mesej={ralatCuaca} onCubaSemula={() => muatCuacaSekarang()} />
+   760→                  </div>
+   761→                ) : (
+   762→                  <div className="mt-4 flex flex-col gap-2.5">
+   763→                    {(dataCuaca?.daily ?? []).map((h, i) => {
+   764→                      const infoH = infoKodCuaca(h.kod);
+   765→                      const labelHari = i === 0 ? "Hari Ini" : formatHari(h.tarikh);
+   766→                      return (
+   767→                        <div
+   768→                          key={h.tarikh}
+   769→                          className="flex items-center justify-between gap-2 rounded-[22px] border border-white/60 bg-white/55 px-4 py-3 transition-colors hover:bg-white/80"
+   770→                        >
+   771→                          <div className="w-[96px] shrink-0">
+   772→                            <p className="text-[15px] font-bold text-[#45220D]">{labelHari}</p>
+   773→                            <p className="text-[11px] font-medium text-[#9A7350]">
+   774→                              {formatTarikhPendek(h.tarikh)}
+   775→                            </p>
+   776→                          </div>
+   777→                          <div className="hidden min-w-0 flex-1 truncate text-right text-[11.5px] font-medium text-[#9A7350] sm:block">
+   778→                            {infoH.label}
+   779→                          </div>
+   780→                          <div className="flex shrink-0 items-center gap-3">
+   781→                            <p className="flex items-center gap-0.5 text-[12px] font-medium text-[#7C8FA5]">
+   782→                              <Droplets size={11} aria-hidden="true" />
+   783→                              {h.hujan != null ? `${h.hujan}%` : "--"}
+   784→                            </p>
+   785→                            <p className="text-[15px]">
+   786→                              <span className="font-medium text-[#9A7350]">
+   787→                                {h.tMin != null ? Math.round(h.tMin) : "--"}°
+   788→                              </span>{" "}
+   789→                              <span className="font-bold text-[#45220D]">
+   790→                                {h.tMaks != null ? Math.round(h.tMaks) : "--"}°
+   791→                              </span>
+   792→                            </p>
+   793→                            <IkonCuaca ikon={infoH.ikon} size={30} />
+   794→                          </div>
+   795→                        </div>
+   796→                      );
+   797→                    })}
+   798→                  </div>
+   799→                )}
+   800→                <p className="mt-3.5 text-center text-[10.5px] text-[#A98A6C]">
+   801→                  Data ramalan sebenar · Open-Meteo · zon Asia/Kuala_Lumpur
+   802→                </p>
+   803→              </div>
+   804→            </motion.section>
+   805→
+   806→        </main>
+   807→
+   808→        {/* ================= FOOTER ================= */}
+   809→        <footer className="mt-8 pb-[env(safe-area-inset-bottom)]">
+   810→          <div className="rounded-[22px] border border-white/60 bg-white/45 px-5 py-4 text-center backdrop-blur-xl">
+   811→            <p className="text-[11.5px] leading-relaxed text-[#8A5A33]">
+   812→              Sumber data sebenar:{" "}
+   813→              <b className="font-semibold text-[#7A4A28]">APIMS · Jabatan Alam Sekitar (DOE) Malaysia</b>{" "}
+   814→              untuk Indeks Pencemaran Udara (IPU) &amp;{" "}
+   815→              <b className="font-semibold text-[#7A4A28]">Open-Meteo</b> untuk cuaca.
+   816→            </p>
+   817→            <p className="mt-1 text-[10.5px] text-[#A98A6C]">
+   818→              Bacaan IPU dikemas kini setiap jam oleh DOE · Fokus kawasan: Perak &amp; Selangor ·
+   819→              Rujukan rasmi: eqms.doe.gov.my ·
+   820→              {masaKemasKini && ` Kemas kini halaman ${formatJam(masaKemasKini)}`}
+   821→            </p>
+   822→          </div>
+   823→        </footer>
+   824→      </div>
+   825→    </div>
+   826→  );
+   827→}
+   828→

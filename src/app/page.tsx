@@ -31,9 +31,7 @@ import {
   negeriById,
   peneranganPencemar,
   tahapDariNilai,
-  formatHari,
   formatJam,
-  formatTarikhPendek,
   type TahapIPU,
 } from "@/lib/cuaca";
 import {
@@ -735,71 +733,6 @@ export default function HalamanCuaca() {
                     })}
                   </div>
                 )}
-              </div>
-            </motion.section>
-
-            {/* ============ RAMALAN 7 HARI ============ */}
-            <motion.section
-              {...anim(0.25)}
-              className="lg:col-span-2"
-              aria-label="Ramalan cuaca 7 hari"
-            >
-              <div className="rounded-[28px] border border-white/70 bg-white/60 p-5 shadow-[0_14px_40px_-16px_rgba(146,84,28,0.28)] backdrop-blur-xl sm:p-6">
-                <p className="text-[13px] font-bold uppercase tracking-[0.14em] text-[#B0723A]">
-                  Ramalan 7 Hari · {negeri.nama}
-                </p>
-                {muatCuaca && !dataCuaca ? (
-                  <div className="mt-4 flex flex-col gap-2.5">
-                    {Array.from({ length: 7 }).map((_, i) => (
-                      <Kerangka key={i} className="h-[58px] w-full rounded-[22px]" />
-                    ))}
-                  </div>
-                ) : ralatCuaca ? (
-                  <div className="mt-4">
-                    <KadRalat mesej={ralatCuaca} onCubaSemula={() => muatCuacaSekarang()} />
-                  </div>
-                ) : (
-                  <div className="mt-4 flex flex-col gap-2.5">
-                    {(dataCuaca?.daily ?? []).map((h, i) => {
-                      const infoH = infoKodCuaca(h.kod);
-                      const labelHari = i === 0 ? "Hari Ini" : formatHari(h.tarikh);
-                      return (
-                        <div
-                          key={h.tarikh}
-                          className="flex items-center justify-between gap-2 rounded-[22px] border border-white/60 bg-white/55 px-4 py-3 transition-colors hover:bg-white/80"
-                        >
-                          <div className="w-[96px] shrink-0">
-                            <p className="text-[15px] font-bold text-[#45220D]">{labelHari}</p>
-                            <p className="text-[11px] font-medium text-[#9A7350]">
-                              {formatTarikhPendek(h.tarikh)}
-                            </p>
-                          </div>
-                          <div className="hidden min-w-0 flex-1 truncate text-right text-[11.5px] font-medium text-[#9A7350] sm:block">
-                            {infoH.label}
-                          </div>
-                          <div className="flex shrink-0 items-center gap-3">
-                            <p className="flex items-center gap-0.5 text-[12px] font-medium text-[#7C8FA5]">
-                              <Droplets size={11} aria-hidden="true" />
-                              {h.hujan != null ? `${h.hujan}%` : "--"}
-                            </p>
-                            <p className="text-[15px]">
-                              <span className="font-medium text-[#9A7350]">
-                                {h.tMin != null ? Math.round(h.tMin) : "--"}°
-                              </span>{" "}
-                              <span className="font-bold text-[#45220D]">
-                                {h.tMaks != null ? Math.round(h.tMaks) : "--"}°
-                              </span>
-                            </p>
-                            <IkonCuaca ikon={infoH.ikon} size={30} />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-                <p className="mt-3.5 text-center text-[10.5px] text-[#A98A6C]">
-                  Data ramalan sebenar · Open-Meteo · zon Asia/Kuala_Lumpur
-                </p>
               </div>
             </motion.section>
 

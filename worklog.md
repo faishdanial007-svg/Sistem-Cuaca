@@ -57,3 +57,19 @@ Stage Summary:
 - Ranking IPU Tertinggi kekal isihan menurun (Berbahaya/tertinggi di atas) seperti permintaan sebelum ini
 - Kad IPU kekal penuh warna ikut tahap (GAYA_KAD)
 - Semua data kekal sebenar: APIMS DOE (IPU) + Open-Meteo (cuaca/ramalan)
+
+---
+Task ID: 4
+Agent: Z.ai (utama)
+Task: Fokuskan sistem kepada 2 negeri (Perak & Selangor) dengan paparan jerebu mengikut daerah (permintaan: "buat real data dan buat 2 negeri sahaja iaitu perak dan selangor. bila pengguna pilih perak...paparkan semua daerah yang terjejas dengan jerebu sama juga seperti selangor")
+
+Work Log:
+- Dapatkan senarai stesen sebenar APIMS: 5 stesen Perak (CA10A Taiping, CA11A Tasek Ipoh, CA12A Pegoh Ipoh, CA13A Seri Manjung, CA14A Tanjung Malim), 6 stesen Selangor (CA18B Kuala Selangor, CA19B PJ, CA20B Shah Alam, CA21B Klang, CA22B Banting, MCAQM001 Johan Setia)
+- lib/cuaca.ts: ganti LOKASI/jarakKm/lokasiById dengan NEGERI_PILIHAN (perak: ibu Ipoh 4.5975,101.0901; selangor: ibu Shah Alam 3.0738,101.5183) + DAERAH_STESEN (pemetaan STATION_ID -> daerah: Larut Matang Selama, Kinta, Manjung, Muallim, Kuala Selangor, Petaling, Klang, Kuala Langat)
+- page.tsx: state negeriId (lalai selangor), buang stesenTerdekat; tambah kumpulanDaerah useMemo (tapis STATE_NAME, kumpul ikut daerah, maks ikut stesen, isih menurun - teruk di atas); kad IPU = ikhtisar negeri penuh lebar (daerah paling teruk + tile bilangan daerah terjejas & stesen); bahagian baharu "Daerah Terjejas Jerebu" grid kad daerah (tint warnaLatar ikut tahap maks, chip nilai warna tahap, baris stesen, penanda TERTINGGI); buang bahagian "IPU Tertinggi di Malaysia"; struktur grid baharu: IPU (span2) -> Daerah (span2) -> Cuaca + 12jam -> Ramalan (span2); cuaca = ibu negeri
+- Lint & tsc bersih; agent-browser: desktop 1440 Selangor (kad kuning, Klang TERTINGGI 155, 4/4 daerah, 6 stesen), desktop Perak (kad biru, Manjung 95, Kinta 2 stesen, cuaca Ipoh), mobile 390 (1-kolum rapi); tiada ralat konsol
+
+Stage Summary:
+- Sistem kini fokus 2 negeri sahaja: Perak & Selangor, semua data sebenar (APIMS DOE + Open-Meteo)
+- Pemilihan negeri memaparkan SEMUA daerah berstesen dengan bacaan IPU masa nyata, warna ikut tahap, diisih paling teruk dahulu
+- Cuaca sekarang + ramalan menggunakan koordinat ibu negeri (Ipoh / Shah Alam)

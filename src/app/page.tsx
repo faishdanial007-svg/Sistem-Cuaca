@@ -7,7 +7,7 @@
 // responsive mobile-first.
 // ============================================================
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   MapPin,
@@ -23,13 +23,12 @@ import {
 } from "lucide-react";
 
 import {
-  LOKASI,
+  NEGERI_PILIHAN,
+  DAERAH_STESEN,
   GAYA_KAD,
   infoKodCuaca,
   infoTahap,
-  jarakKm,
-  kelasKeBM,
-  lokasiById,
+  negeriById,
   peneranganPencemar,
   tahapDariNilai,
   formatHari,
@@ -107,11 +106,28 @@ interface ResponCuaca {
   ralat?: string;
 }
 
+interface StesenDaerah {
+  id: string;
+  tempat: string;
+  daerah: string;
+  ipu: number | null;
+  pencemar: string | null;
+  masaBacaan: string | null;
+}
+
+interface KumpulanDaerah {
+  daerah: string;
+  stesen: StesenDaerah[];
+  /** IPU tertinggi dalam daerah ini */
+  maks: number; // -1 = tiada bacaan sah
+  tahap: TahapIPU;
+}
+
 const SELANG_AUTO = 10 * 60 * 1000; // 10 minit
 
 export default function HalamanCuaca() {
-  const [locId, setLocId] = useState("kl");
-  const lokasi = lokasiById(locId);
+  const [negeriId, setNegeriId] = useState("selangor");
+  const negeri = negeriById(negeriId);
 
   const [dataIPU, setDataIPU] = useState<ResponIPU | null>(null);
   const [dataCuaca, setDataCuaca] = useState<ResponCuaca | null>(null);
@@ -121,7 +137,6 @@ export default function HalamanCuaca() {
   const [ralatCuaca, setRalatCuaca] = useState<string | null>(null);
   const [segarkan, setSegarkan] = useState(false);
   const [masaKemasKini, setMasaKemasKini] = useState<string | null>(null);
-  const pertamaKali = useRef(true);
 
   // ---------- pemuatan data ----------
   const muatIPUSekarang = useCallback(async (senyap = false) => {
@@ -145,7 +160,7 @@ export default function HalamanCuaca() {
       if (!senyap) setMuatCuaca(true);
       setRalatCuaca(null);
       try {
-        const res = await fetch(`/api/weather?lat=${lokasi.lat}&lon=${lokasi.lon}`, {
+        const res = await fetch(`/api/weather?lat=${negeri.lat}&lon=${negeri.lon}`, {
           cache: "no-store",
         });
         const json = (await res.json()) as ResponCuaca;
@@ -157,10 +172,10 @@ export default function HalamanCuaca() {
         setMuatCuaca(false);
       }
     },
-    [lokasi.lat, lokasi.lon],
+    [negeri.lat, negeri.lon],
   );
 
-  // Muat apabila lokasi bertukar
+  // Muat apabila negeri bertukar
   useEffect(() => {
     muatIPUSekarang();
     muatCuacaSekarang();
@@ -182,35 +197,56 @@ export default function HalamanCuaca() {
     setTimeout(() => setSegarkan(false), 600);
   }, [muatIPUSekarang, muatCuacaSekarang]);
 
-  // ---------- stesen IPU terdekat ----------
-  const stesenTerdekat = useMemo<StesenKlien | null>(() => {
-    const senarai = dataIPU?.stations ?? [];
-    if (senarai.length === 0) return null;
-    const sah = senarai.filter((s) => s.ipu != null);
-    const kolam = sah.length > 0 ? sah : senarai;
-    let terbaik = kolam[0];
-    let terkecil = Infinity;
-    for (const s of kolam) {
-      const d = jarakKm(lokasi.lat, lokasi.lon, s.lat, s.lon);
-      if (d < terkecil) {
-        terkecil = d;
-        terbaik = s;
-      }
+  // ---------- kumpul stesen mengikut daerah bagi negeri terpilih ----------
+  const kumpulanDaerah = useMemo<KumpulanDaerah[]>(() => {
+    const senarai = (dataIPU?.stations ?? []).filter(
+      (s) =>
+        s.negeri.trim().toUpperCase() === negeri.idApims &&
+        DAERAH_STESEN[s.id] != null,
+    );
+    const peta = new Map<string, StesenDaerah[]>();
+    for (const s of senarai) {
+      const info = DAERAH_STESEN[s.id];
+      const senaraiDlm = peta.get(info.daerah) ?? [];
+      senaraiDlm.push({
+        id: s.id,
+        tempat: info.tempat,
+        daerah: info.daerah,
+        ipu: s.ipu,
+        pencemar: s.pencemar,
+        masaBacaan: s.masaBacaan,
+      });
+      peta.set(info.daerah, senaraiDlm);
     }
-    return terbaik;
-  }, [dataIPU, lokasi.lat, lokasi.lon]);
+    const kumpulan: KumpulanDaerah[] = [];
+    for (const [daerah, stesen] of peta) {
+      const nilaiSah = stesen
+        .map((x) => x.ipu)
+        .filter((v): v is number => v != null);
+      const maks = nilaiSah.length > 0 ? Math.max(...nilaiSah) : -1;
+      kumpulan.push({
+        daerah,
+        stesen: [...stesen].sort((a, b) => (b.ipu ?? -1) - (a.ipu ?? -1)),
+        maks,
+        tahap: tahapDariNilai(maks >= 0 ? maks : null),
+      });
+    }
+    // Daerah paling teruk dahulu (berbahaya/tidak sihat di atas)
+    return kumpulan.sort((a, b) => b.maks - a.maks);
+  }, [dataIPU, negeri.idApims]);
 
   // ---------- nilai terbitan ----------
-  const nilaiIPU = stesenTerdekat?.ipu ?? null;
+  const daerahTeruk = kumpulanDaerah.find((k) => k.maks >= 0) ?? null;
+  const stesenTeruk = daerahTeruk?.stesen[0] ?? null;
+  const nilaiIPU = daerahTeruk && daerahTeruk.maks >= 0 ? daerahTeruk.maks : null;
   const tahap: TahapIPU = tahapDariNilai(nilaiIPU);
   const info = infoTahap(tahap);
   // Gaya kad penuh ikut tahap (kuning bila Tidak Sihat, biru bila Sederhana, dll.)
   const gaya = tahap !== "tiada" ? GAYA_KAD[tahap as Exclude<TahapIPU, "tiada">] : null;
-  const warnaNilai =
-    tahap !== "tiada" ? WARNA_NILAI_KAD[tahap as Exclude<TahapIPU, "tiada">] : "#8D8378";
-
-  const kelasBM = kelasKeBM(stesenTerdekat?.kelas ?? null);
-  const labelTahap = info?.label ?? kelasBM ?? "Tiada Bacaan";
+  const labelTahap = info?.label ?? "Tiada Bacaan";
+  const bilDaerah = kumpulanDaerah.length;
+  const bilTerjejas = kumpulanDaerah.filter((k) => k.maks > 50).length;
+  const bilStesen = kumpulanDaerah.reduce((n, k) => n + k.stesen.length, 0);
 
   const cuacaSekarang = dataCuaca?.current ?? null;
   const infoCuacaSekarang = infoKodCuaca(cuacaSekarang?.kod);
@@ -250,7 +286,7 @@ export default function HalamanCuaca() {
         <motion.header {...anim(0)} className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#B0723A]">
-              Malaysia · Masa Nyata
+              Perak &amp; Selangor · Masa Nyata
             </p>
             <h1 className="mt-0.5 text-[26px] font-bold leading-tight text-[#45220D] sm:text-3xl">
               Cuaca &amp; Jerebu
@@ -263,15 +299,15 @@ export default function HalamanCuaca() {
                 className="pointer-events-none absolute left-3.5 top-1/2 z-10 -translate-y-1/2 text-[#B0723A]"
                 aria-hidden="true"
               />
-              <Select value={locId} onValueChange={setLocId}>
+              <Select value={negeriId} onValueChange={setNegeriId}>
                 <SelectTrigger
-                  aria-label="Pilih lokasi"
+                  aria-label="Pilih negeri"
                   className="h-11 w-full rounded-full border-white/70 bg-white/60 pl-9 pr-3 text-[15px] font-semibold text-[#45220D] shadow-sm backdrop-blur-xl focus:ring-2 focus:ring-[#E89A1D]/50 data-[placeholder]:text-[#9A7350]"
                 >
-                  <SelectValue placeholder="Pilih lokasi" />
+                  <SelectValue placeholder="Pilih negeri" />
                 </SelectTrigger>
                 <SelectContent className="max-h-72 rounded-2xl border-white/70 bg-white/95 backdrop-blur-xl">
-                  {LOKASI.map((l) => (
+                  {NEGERI_PILIHAN.map((l) => (
                     <SelectItem
                       key={l.id}
                       value={l.id}
@@ -296,10 +332,8 @@ export default function HalamanCuaca() {
 
         {/* ================= KANDUNGAN UTAMA ================= */}
         <main className="mt-4 grid flex-1 grid-cols-1 gap-4 sm:mt-5 sm:gap-5 lg:grid-cols-2 lg:gap-6">
-          {/* ---------- Kolum kiri: IPU + cuaca semasa + jam ---------- */}
-          <div className="flex flex-col gap-4 sm:gap-5">
-            {/* ============ KAD IPU ============ */}
-            <motion.section {...anim(0.05)} aria-label="Indeks Pencemaran Udara">
+          {/* ============ KAD IPU - IKHTISAR NEGERI (penuh lebar) ============ */}
+          <motion.section {...anim(0.05)} className="lg:col-span-2" aria-label="Indeks Pencemaran Udara">
               <div
                 className="rounded-[28px] border p-5 shadow-[0_14px_40px_-16px_rgba(146,84,28,0.28)] backdrop-blur-xl transition-colors duration-500 sm:p-6"
                 style={{
@@ -313,18 +347,18 @@ export default function HalamanCuaca() {
                       className="flex items-center gap-1.5 text-[13px] font-bold uppercase tracking-[0.14em]"
                       style={{ color: gaya?.sub ?? "#B0723A" }}
                     >
-                      <Gauge size={14} aria-hidden="true" /> Bacaan IPU
+                      <Gauge size={14} aria-hidden="true" /> Bacaan IPU · {negeri.nama}
                     </p>
                     <p
                       className="mt-1 truncate text-xl font-bold"
                       style={{ color: gaya?.teks ?? "#45220D" }}
                     >
-                      {lokasi.nama}
+                      {daerahTeruk ? daerahTeruk.daerah : negeri.nama}
                     </p>
                     <p className="text-xs" style={{ color: gaya?.kurang ?? "#9A7350" }}>
-                      {stesenTerdekat
-                        ? `Stesen ${stesenTerdekat.id} · ${stesenTerdekat.lokasi}`
-                        : "Mencari stesen terdekat…"}
+                      {stesenTeruk
+                        ? `Stesen ${stesenTeruk.id} · ${stesenTeruk.tempat}`
+                        : "Menunggu data stesen…"}
                     </p>
                   </div>
                   <span
@@ -351,7 +385,7 @@ export default function HalamanCuaca() {
                       <div className="flex items-end gap-2.5">
                         <span
                           className="text-[68px] font-bold leading-none tracking-tight sm:text-[76px]"
-                          style={{ color: gaya?.teks ?? warnaNilai }}
+                          style={{ color: gaya?.teks ?? "#45220D" }}
                         >
                           {nilaiIPU ?? "--"}
                         </span>
@@ -366,19 +400,19 @@ export default function HalamanCuaca() {
                         className="pb-2 text-right text-[11.5px] leading-snug"
                         style={{ color: gaya?.kurang ?? "#9A7350" }}
                       >
-                        {stesenTerdekat?.masaBacaan && (
+                        {stesenTeruk?.masaBacaan && (
                           <p>
                             Bacaan jam{" "}
                             <b style={{ color: gaya?.teks ?? "#7A4A28" }}>
-                              {formatJam(stesenTerdekat.masaBacaan)}
+                              {formatJam(stesenTeruk.masaBacaan)}
                             </b>
                           </p>
                         )}
-                        {peneranganPencemar(stesenTerdekat?.pencemar) ? (
+                        {peneranganPencemar(stesenTeruk?.pencemar) ? (
                           <p>
                             Dominan:{" "}
                             <b style={{ color: gaya?.teks ?? "#7A4A28" }}>
-                              {peneranganPencemar(stesenTerdekat?.pencemar)}
+                              {peneranganPencemar(stesenTeruk?.pencemar)}
                             </b>
                           </p>
                         ) : (
@@ -392,16 +426,185 @@ export default function HalamanCuaca() {
                       warnaLabel={gaya?.teks}
                       warnaJulat={gaya?.kurang}
                     />
+
+                    <div className="mt-4 grid grid-cols-2 gap-2 sm:max-w-md">
+                      <div
+                        className="rounded-2xl px-3 py-2"
+                        style={{ backgroundColor: gaya?.tile ?? "rgba(255,255,255,0.45)" }}
+                      >
+                        <p
+                          className="text-[11px] font-medium"
+                          style={{ color: gaya?.kurang ?? "#9A7350" }}
+                        >
+                          Daerah terjejas jerebu
+                        </p>
+                        <p
+                          className="text-[15px] font-bold"
+                          style={{ color: gaya?.teks ?? "#45220D" }}
+                        >
+                          {bilTerjejas} / {bilDaerah} daerah
+                        </p>
+                      </div>
+                      <div
+                        className="rounded-2xl px-3 py-2"
+                        style={{ backgroundColor: gaya?.tile ?? "rgba(255,255,255,0.45)" }}
+                      >
+                        <p
+                          className="text-[11px] font-medium"
+                          style={{ color: gaya?.kurang ?? "#9A7350" }}
+                        >
+                          Stesen DOE dipantau
+                        </p>
+                        <p
+                          className="text-[15px] font-bold"
+                          style={{ color: gaya?.teks ?? "#45220D" }}
+                        >
+                          {bilStesen} stesen
+                        </p>
+                      </div>
+                    </div>
                   </>
                 )}
               </div>
             </motion.section>
 
+            {/* ============ DAERAH TERJEJAS JEREBU ============ */}
+            <motion.section
+              {...anim(0.1)}
+              className="lg:col-span-2"
+              aria-label="Daerah terjejas jerebu"
+            >
+              <div className="rounded-[28px] border border-white/70 bg-white/60 p-5 shadow-[0_14px_40px_-16px_rgba(146,84,28,0.28)] backdrop-blur-xl sm:p-6">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                  <p className="flex items-center gap-1.5 text-[13px] font-bold uppercase tracking-[0.14em] text-[#B0723A]">
+                    <MapPin size={14} aria-hidden="true" /> Daerah Terjejas Jerebu ·{" "}
+                    {negeri.nama}
+                  </p>
+                  {bilDaerah > 0 && (
+                    <p className="text-[11px] font-medium text-[#9A7350]">
+                      {bilTerjejas} daripada {bilDaerah} daerah melebihi bacaan Baik
+                    </p>
+                  )}
+                </div>
+
+                {muatIPU && !dataIPU ? (
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <Kerangka key={i} className="h-[118px] w-full rounded-[22px]" />
+                    ))}
+                  </div>
+                ) : kumpulanDaerah.length === 0 ? (
+                  <p className="mt-4 text-sm text-[#9A7350]">
+                    Tiada data stesen daerah buat masa ini. Sila cuba segarkan.
+                  </p>
+                ) : (
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    {kumpulanDaerah.map((k, i) => {
+                      const infoD = infoTahap(k.tahap);
+                      const aksen = infoD?.warna ?? "#8D8378";
+                      return (
+                        <div
+                          key={k.daerah}
+                          className="relative rounded-[22px] border p-4"
+                          style={{
+                            backgroundColor:
+                              infoD?.warnaLatar ?? "rgba(141,131,120,0.12)",
+                            borderColor: `${aksen}55`,
+                          }}
+                        >
+                          {i === 0 && bilDaerah > 1 && k.maks >= 0 && (
+                            <span
+                              className="absolute -top-2.5 right-4 rounded-full px-2.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wider text-white shadow-sm"
+                              style={{ backgroundColor: aksen }}
+                            >
+                              Tertinggi
+                            </span>
+                          )}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="truncate text-[16px] font-bold text-[#45220D]">
+                                {k.daerah}
+                              </p>
+                              <p className="text-[10.5px] font-medium text-[#9A7350]">
+                                {k.stesen.length === 1
+                                  ? "1 stesen DOE"
+                                  : `${k.stesen.length} stesen DOE`}
+                              </p>
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <span
+                                className="inline-flex rounded-full px-3 py-1 text-[15px] font-bold shadow-sm"
+                                style={
+                                  infoD
+                                    ? {
+                                        backgroundColor: infoD.warna,
+                                        color: infoD.warnaTeks,
+                                      }
+                                    : {
+                                        backgroundColor: "rgba(141,131,120,0.2)",
+                                        color: "#6B5E52",
+                                      }
+                                }
+                              >
+                                {k.maks >= 0 ? k.maks : "--"}
+                              </span>
+                              <p
+                                className="mt-0.5 text-[9.5px] font-bold uppercase tracking-wide"
+                                style={{ color: aksen }}
+                              >
+                                {infoD?.label ?? "Tiada Bacaan"}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="mt-2.5 flex flex-col gap-1.5">
+                            {k.stesen.map((s) => {
+                              const tS = tahapDariNilai(s.ipu);
+                              const infoS = infoTahap(tS);
+                              return (
+                                <div
+                                  key={s.id}
+                                  className="flex items-center justify-between gap-2 rounded-xl bg-white/55 px-3 py-1.5"
+                                >
+                                  <p className="min-w-0 truncate text-[12.5px] font-medium text-[#5C3A1E]">
+                                    {s.tempat}
+                                  </p>
+                                  <p
+                                    className="shrink-0 text-[13.5px] font-bold"
+                                    style={{
+                                      color: infoS
+                                        ? WARNA_NILAI_KAD[
+                                            tS as Exclude<TahapIPU, "tiada">
+                                          ]
+                                        : "#8D8378",
+                                    }}
+                                  >
+                                    {s.ipu ?? "—"}
+                                  </p>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {dataIPU && kumpulanDaerah.length > 0 && (
+                  <p className="mt-3.5 flex items-center gap-1.5 text-[11px] text-[#9A7350]">
+                    <RotateCw size={11} aria-hidden="true" />
+                    Bacaan masa nyata APIMS DOE · auto segar setiap 10 minit
+                  </p>
+                )}
+              </div>
+            </motion.section>
+
             {/* ============ CUACA SEMASA ============ */}
-            <motion.section {...anim(0.1)} aria-label="Cuaca semasa">
+            <motion.section {...anim(0.15)} aria-label="Cuaca semasa">
               <div className="rounded-[28px] border border-white/70 bg-white/60 p-5 shadow-[0_14px_40px_-16px_rgba(146,84,28,0.28)] backdrop-blur-xl sm:p-6">
                 <p className="flex items-center gap-1.5 text-[13px] font-bold uppercase tracking-[0.14em] text-[#B0723A]">
-                  <Thermometer size={14} aria-hidden="true" /> Cuaca Sekarang
+                  <Thermometer size={14} aria-hidden="true" /> Cuaca Sekarang · {negeri.ibu}
                 </p>
                 {muatCuaca && !dataCuaca ? (
                   <KadSkeleton tinggi="h-40" />
@@ -496,7 +699,7 @@ export default function HalamanCuaca() {
             </motion.section>
 
             {/* ============ JAM-HARIAN (12 JAM) ============ */}
-            <motion.section {...anim(0.15)} aria-label="Ramalan jam-harian">
+            <motion.section {...anim(0.2)} aria-label="Ramalan jam-harian">
               <div className="rounded-[28px] border border-white/70 bg-white/60 p-5 shadow-[0_14px_40px_-16px_rgba(146,84,28,0.28)] backdrop-blur-xl sm:p-6">
                 <p className="text-[13px] font-bold uppercase tracking-[0.14em] text-[#B0723A]">
                   12 Jam Akan Datang
@@ -534,15 +737,16 @@ export default function HalamanCuaca() {
                 )}
               </div>
             </motion.section>
-          </div>
 
-          {/* ---------- Kolum kanan: ramalan 7 hari + kedudukan ---------- */}
-          <div className="flex flex-col gap-4 sm:gap-5">
             {/* ============ RAMALAN 7 HARI ============ */}
-            <motion.section {...anim(0.2)} aria-label="Ramalan cuaca 7 hari">
+            <motion.section
+              {...anim(0.25)}
+              className="lg:col-span-2"
+              aria-label="Ramalan cuaca 7 hari"
+            >
               <div className="rounded-[28px] border border-white/70 bg-white/60 p-5 shadow-[0_14px_40px_-16px_rgba(146,84,28,0.28)] backdrop-blur-xl sm:p-6">
                 <p className="text-[13px] font-bold uppercase tracking-[0.14em] text-[#B0723A]">
-                  Ramalan 7 Hari · {lokasi.nama}
+                  Ramalan 7 Hari · {negeri.nama}
                 </p>
                 {muatCuaca && !dataCuaca ? (
                   <div className="mt-4 flex flex-col gap-2.5">
@@ -599,67 +803,6 @@ export default function HalamanCuaca() {
               </div>
             </motion.section>
 
-            {/* ============ KEDUDUKAN IPU TERTINGGI ============ */}
-            <motion.section {...anim(0.25)} aria-label="Kedudukan IPU tertinggi di Malaysia">
-              <div className="rounded-[28px] border border-white/70 bg-white/60 p-5 shadow-[0_14px_40px_-16px_rgba(146,84,28,0.28)] backdrop-blur-xl sm:p-6">
-                <p className="text-[13px] font-bold uppercase tracking-[0.14em] text-[#B0723A]">
-                  IPU Tertinggi di Malaysia
-                </p>
-                {muatIPU && !dataIPU ? (
-                  <div className="mt-4 flex flex-col gap-2.5">
-                    {Array.from({ length: 5 }).map((_, i) => (
-                      <Kerangka key={i} className="h-10 w-full rounded-2xl" />
-                    ))}
-                  </div>
-                ) : (
-                  <>
-                    {(dataIPU?.ranking?.length ?? 0) > 0 ? (
-                      <div className="mt-4 flex flex-col gap-2">
-                        {(dataIPU?.ranking ?? []).slice(0, 5).map((r, i) => {
-                          const t = tahapDariNilai(r.ipu);
-                          const infoR = infoTahap(t);
-                          return (
-                            <div
-                              key={r.stesen}
-                              className="flex items-center gap-3 rounded-2xl border border-white/60 bg-white/55 px-3.5 py-2.5"
-                            >
-                              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#FFE8CC] text-[12px] font-bold text-[#B0723A]">
-                                {i + 1}
-                              </span>
-                              <p className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-[#45220D]">
-                                {r.lokasi}
-                              </p>
-                              <span
-                                className="shrink-0 rounded-full px-3 py-1 text-[13px] font-bold"
-                                style={
-                                  infoR
-                                    ? { backgroundColor: infoR.warna, color: infoR.warnaTeks }
-                                    : { backgroundColor: "rgba(141,131,120,0.2)", color: "#6B5E52" }
-                                }
-                              >
-                                {r.ipu}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <p className="mt-4 text-sm text-[#9A7350]">
-                        Data kedudukan tidak tersedia buat masa ini.
-                      </p>
-                    )}
-
-                    {dataIPU && (
-                      <p className="mt-4 flex items-center gap-1.5 text-[11px] text-[#9A7350]">
-                        <RotateCw size={11} aria-hidden="true" />
-                        Bacaan tertinggi {formatJam(dataIPU.updatedAt)} · auto setiap 10 minit
-                      </p>
-                    )}
-                  </>
-                )}
-              </div>
-            </motion.section>
-          </div>
         </main>
 
         {/* ================= FOOTER ================= */}
@@ -672,7 +815,8 @@ export default function HalamanCuaca() {
               <b className="font-semibold text-[#7A4A28]">Open-Meteo</b> untuk cuaca.
             </p>
             <p className="mt-1 text-[10.5px] text-[#A98A6C]">
-              Bacaan IPU dikemas kini setiap jam oleh DOE · Rujukan rasmi: eqms.doe.gov.my ·
+              Bacaan IPU dikemas kini setiap jam oleh DOE · Fokus kawasan: Perak &amp; Selangor ·
+              Rujukan rasmi: eqms.doe.gov.my ·
               {masaKemasKini && ` Kemas kini halaman ${formatJam(masaKemasKini)}`}
             </p>
           </div>

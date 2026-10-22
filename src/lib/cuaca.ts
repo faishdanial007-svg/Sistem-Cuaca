@@ -252,60 +252,52 @@ export function peneranganPencemar(sym: string | null | undefined): string | nul
 }
 
 // ------------------------------------------------------------
-// Senarai lokasi utama Malaysia (lat/lon untuk cuaca Open-Meteo;
-// stesen IPU dipilih secara automatik - stesen terdekat)
+// Negeri pilihan (2 sahaja): Perak & Selangor.
+// Koordinat = ibu negeri (untuk cuaca sebenar Open-Meteo).
+// idApims = nilai STATE_NAME dalam API APIMS DOE.
 // ------------------------------------------------------------
-export interface Lokasi {
+export interface Negeri {
   id: string;
   nama: string;
-  negeri: string;
+  idApims: string;
+  ibu: string;
   lat: number;
   lon: number;
 }
 
-export const LOKASI: Lokasi[] = [
-  { id: "kl", nama: "Kuala Lumpur", negeri: "W.P. Kuala Lumpur", lat: 3.139, lon: 101.6869 },
-  { id: "putrajaya", nama: "Putrajaya", negeri: "W.P. Putrajaya", lat: 2.9264, lon: 101.6964 },
-  { id: "shahalam", nama: "Shah Alam", negeri: "Selangor", lat: 3.0738, lon: 101.5183 },
-  { id: "jb", nama: "Johor Bahru", negeri: "Johor", lat: 1.4927, lon: 103.7414 },
-  { id: "melaka", nama: "Bandar Melaka", negeri: "Melaka", lat: 2.1896, lon: 102.2501 },
-  { id: "seremban", nama: "Seremban", negeri: "Negeri Sembilan", lat: 2.7297, lon: 101.9381 },
-  { id: "ipoh", nama: "Ipoh", negeri: "Perak", lat: 4.5975, lon: 101.0901 },
-  { id: "penang", nama: "George Town", negeri: "Pulau Pinang", lat: 5.4141, lon: 100.3288 },
-  { id: "langkawi", nama: "Langkawi", negeri: "Kedah", lat: 6.35, lon: 99.8 },
-  { id: "alorsetar", nama: "Alor Setar", negeri: "Kedah", lat: 6.1248, lon: 100.3678 },
-  { id: "kangar", nama: "Kangar", negeri: "Perlis", lat: 6.4299, lon: 100.2109 },
-  { id: "kb", nama: "Kota Bharu", negeri: "Kelantan", lat: 6.1333, lon: 102.2386 },
-  { id: "kt", nama: "Kuala Terengganu", negeri: "Terengganu", lat: 5.3297, lon: 103.1375 },
-  { id: "kuantan", nama: "Kuantan", negeri: "Pahang", lat: 3.8121, lon: 103.3265 },
-  { id: "kuching", nama: "Kuching", negeri: "Sarawak", lat: 1.5533, lon: 110.3592 },
-  { id: "miri", nama: "Miri", negeri: "Sarawak", lat: 4.3995, lon: 113.9914 },
-  { id: "kk", nama: "Kota Kinabalu", negeri: "Sabah", lat: 5.9804, lon: 116.0735 },
-  { id: "sandakan", nama: "Sandakan", negeri: "Sabah", lat: 5.8402, lon: 118.1179 },
+export const NEGERI_PILIHAN: Negeri[] = [
+  { id: "perak", nama: "Perak", idApims: "PERAK", ibu: "Ipoh", lat: 4.5975, lon: 101.0901 },
+  { id: "selangor", nama: "Selangor", idApims: "SELANGOR", ibu: "Shah Alam", lat: 3.0738, lon: 101.5183 },
 ];
 
-export function lokasiById(id: string): Lokasi {
-  return LOKASI.find((l) => l.id === id) ?? LOKASI[0];
+export function negeriById(id: string): Negeri {
+  return NEGERI_PILIHAN.find((n) => n.id === id) ?? NEGERI_PILIHAN[0];
 }
 
-// Jarak haversine (km) - untuk cari stesen IPU terdekat
-export function jarakKm(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number,
-): number {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+// ------------------------------------------------------------
+// Pemetaan stesen APIMS DOE -> daerah (kunci = STATION_ID).
+// Digunakan untuk memaparkan jerebu mengikut daerah sebenar.
+// ------------------------------------------------------------
+export interface InfoStesenDaerah {
+  daerah: string;
+  tempat: string;
 }
+
+export const DAERAH_STESEN: Record<string, InfoStesenDaerah> = {
+  // Perak
+  CA10A: { daerah: "Larut, Matang dan Selama", tempat: "Taiping" },
+  CA11A: { daerah: "Kinta", tempat: "Tasek Ipoh" },
+  CA12A: { daerah: "Kinta", tempat: "Pegoh, Ipoh" },
+  CA13A: { daerah: "Manjung", tempat: "Seri Manjung" },
+  CA14A: { daerah: "Muallim", tempat: "Tanjung Malim" },
+  // Selangor
+  CA18B: { daerah: "Kuala Selangor", tempat: "Kuala Selangor" },
+  CA19B: { daerah: "Petaling", tempat: "Petaling Jaya" },
+  CA20B: { daerah: "Petaling", tempat: "Shah Alam" },
+  CA21B: { daerah: "Klang", tempat: "Klang" },
+  CA22B: { daerah: "Kuala Langat", tempat: "Banting" },
+  MCAQM001: { daerah: "Klang", tempat: "Johan Setia" },
+};
 
 // ------------------------------------------------------------
 // Format tarikh / masa Bahasa Melayu (sentiasa zon Asia/Kuala_Lumpur,
